@@ -46,5 +46,9 @@
   L2 真实库校验走 SqlValidator 适配接口。范围锁定"小型脚本"，复杂特性入已知限制。
 - **ADR-6 部署**：同一套代码三形态；远程仅 HTTPS 反代 + Bearer Token（首期），
   多用户阶段升级 MCP OAuth 2.1。
+- **ADR-7 doc 域（M3-01~04 落地）**：`DocStorage` 抽象 + `LocalDocStorage`（UUID
+  storage_key、防路径穿越、owner 分目录）；元数据落 `documents` 表经
+  `OwnerScopedRepository` 强制隔离；provider 恒 LOCAL（企微后端随 M3-03 延后）；
+  解析器 `rag/parsers` 按扩展名路由 txt/md/pdf/docx，损坏文件可读报错。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from .config import get_settings
 from .common.logging import get_logger
+from .config import get_settings
 
 logger = get_logger(__name__)
 
@@ -32,13 +32,18 @@ def register_tools() -> None:
     按里程碑推进逐步解除注释：
         M0: hello（占位）
         M2: sql_er, sql_validate
-        M3: doc, kb
+        M3: doc（kb 待 M3-05~09 里程碑）
         M4: svn, requirement, project, tag
         M5: mindmap, standard
     """
     from .domains import hello  # noqa: F401  (占位连通测试)
+    from .domains.doc import (
+        tools as doc_tools,  # noqa: F401  (注册 doc_save/read/search/list/delete)
+    )
     from .domains.sql_er import tools as sql_er_tools  # noqa: F401  (注册 sql_er_from_ddl)
-    from .domains.sql_validate import tools as sql_validate_tools  # noqa: F401  (注册 sql_validate_script)
+    from .domains.sql_validate import (
+        tools as sql_validate_tools,  # noqa: F401  (注册 sql_validate_script)
+    )
 
 
 def run() -> None:
@@ -46,7 +51,11 @@ def run() -> None:
     transport = settings.mcp_transport
     if transport == "http":
         settings.require_http_auth()
-        logger.info("启动 streamable-http 传输 host=%s port=%s", settings.http_host, settings.http_port)
+        logger.info(
+            "启动 streamable-http 传输 host=%s port=%s",
+            settings.http_host,
+            settings.http_port,
+        )
         mcp.run(transport="streamable-http")
     elif transport == "stdio":
         logger.info("启动 stdio 传输")

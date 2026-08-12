@@ -208,10 +208,10 @@ littledotmcp 项目任务计划（WBS）
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M3-01 | 文档解析器集合：txt/md/pdf/docx → 纯文本 | ⬜ |
-| M3-02 | DocStorage 抽象 + 本地实现（防穿越） | ⬜ |
-| M3-03 | 企业微信实现：微盘/文档 API 客户端骨架 | ⬜ |
-| M3-04 | doc 域工具：doc_save/read/search/list/delete | ⬜ |
+| M3-01 | 文档解析器集合：txt/md/pdf/docx → 纯文本 | ✅ 2026-08-12 |
+| M3-02 | DocStorage 抽象 + 本地实现（防穿越） | ✅ 2026-08-12 |
+| M3-03 | 企业微信实现：微盘/文档 API 客户端骨架 | ⏸ 延后至后续里程碑 |
+| M3-04 | doc 域工具：doc_save/read/search/list/delete | ✅ 2026-08-12 |
 | M3-05 | 切块器：中文感知、500~800 token、10% 重叠 | ⬜ |
 | M3-06 | Embedding 抽象：OpenAI 兼容 + Ollama、结果缓存 | ⬜ |
 | M3-07 | VectorStore 抽象 + ChromaDB 持久化（metadata 强制 owner_id） | ⬜ |
@@ -228,15 +228,15 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：save/load/delete 测试通过；穿越路径被拒；owner 目录隔离。
 - 依赖：M1-04；规模：M；关键文件：`domains/doc/storage.py`。
 
-**M3-03 企业微信实现**
+**M3-03 企业微信实现（⏸ 延后至后续里程碑）**
 - 说明：`domains/doc/wecom.py`：企微微盘/文档 API 客户端骨架（corpid/agentid/secret 注入、token 缓存、上传/下载/删除）；未配置凭据时返回明确降级提示；备选"仅企微机器人通知"模式。
 - 验收标准：凭据缺失时报可读错误；mock API 冒烟通过；失败不崩溃。
 - 依赖：M3-02；规模：L；关键文件：`domains/doc/wecom.py`。
 
 **M3-04 doc 域工具**
-- 说明：`doc_save/doc_read/doc_search/doc_list/doc_delete`（provider 切换 LOCAL/WECOM）；元数据落 `documents` 表；搜索走 name/type/标签过滤。
-- 验收标准：全链路 CRUD 测试；provider 切换生效；搜索过滤正确。
-- 依赖：M3-02/03 + M1-04；规模：M；关键文件：`domains/doc/tools.py`。
+- 说明：`doc_save/doc_read/doc_search/doc_list/doc_delete`（provider 恒 LOCAL，企微切换随 M3-03 延后）；元数据落 `documents` 表（OwnerScopedRepository 强制 owner 隔离）；搜索走 name 模糊 + mime 过滤。
+- 验收标准：全链路 CRUD 测试；A/B 用户数据互不可见；搜索过滤正确。
+- 依赖：M3-02 + M1-04；规模：M；关键文件：`domains/doc/tools.py`。
 
 **M3-05 切块器**
 - 说明：`rag/chunker.py`：中文感知分句（按标点/换行）+ 按字符/token 预算切块（500~800 token，10% 重叠），保留块序号与来源锚点。
@@ -459,10 +459,10 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M2-06 | sql_er_from_ddl 工具 | M2-03 | ⬜ | |
 | M2-07 | sql_validate_script 工具 | M2-04 | ⬜ | |
 | M2-08 | golden 测试与限制清单 | M2-02/03/04 | ⬜ | |
-| M3-01 | 文档解析器集合 | M1-01 | ⬜ | |
-| M3-02 | DocStorage 本地实现 | M1-04 | ⬜ | |
-| M3-03 | 企业微信实现 | M3-02 | ⬜ | |
-| M3-04 | doc 域工具 | M3-02/03 | ⬜ | |
+| M3-01 | 文档解析器集合 | M1-01 | ✅ | 2026-08-12 |
+| M3-02 | DocStorage 本地实现 | M1-04 | ✅ | 2026-08-12 |
+| M3-03 | 企业微信实现 | M3-02 | ⏸ | 延后至后续里程碑 |
+| M3-04 | doc 域工具 | M3-02 | ✅ | 2026-08-12（provider 恒 LOCAL） |
 | M3-05 | 切块器 | M3-01 | ⬜ | |
 | M3-06 | Embedding 抽象 | M1-07 | ⬜ | |
 | M3-07 | VectorStore + ChromaDB | M3-06 | ⬜ | |
