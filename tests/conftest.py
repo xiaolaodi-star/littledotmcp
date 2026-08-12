@@ -43,3 +43,27 @@ def isolated_settings(tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("VECTOR_DIR", str(s.vector_dir))
     get_settings.cache_clear()
     return s
+
+
+@pytest.fixture
+def sqlite_tmp_engine(tmp_data_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    """重建模块级 SQLAlchemy engine 指向临时 SQLite，避免污染真实 data/。
+
+    返回 (engine, SessionLocal)，并注入到 db.engine / auth 使用的会话工厂。
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    import littledotmcp.db.engine as engine_mod
+
+    eng = create_engine(
+        f"sqlite:///{tmp_data_dir / 'm1.db'}",
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+        future=True,
+    )
+    sess_factory = sessionmaker(bind=eng, autoflush=False, autocommit=False, future=True)
+    monkeypatch.setattr(engine_mod, "engine", eng)
+    monkeypatch.setattr(engine_mod, "SessionLocal", sess_factory)
+    yield eng
+    eng.dispose()

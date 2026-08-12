@@ -12,6 +12,8 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "starlette>=0.37",
+    "sqlalchemy>=2.0",
+    "argon2-cffi>=23.1",
 ]
 
 # 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot/chromadb 等见 docs/PLAN.md）

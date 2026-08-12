@@ -13,7 +13,7 @@ class ToolkitError(Exception):
     code: str = "E_INTERNAL"
     http_status: int = 500
 
-    def __init__(self, message: str, *, code: str | None = None, data: object = None) -> None:
+    def __init__(self, message: str = "", *, code: str | None = None, data: object = None) -> None:
         super().__init__(message)
         self.message = message
         self.data = data
