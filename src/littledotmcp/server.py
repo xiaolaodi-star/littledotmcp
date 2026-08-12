@@ -36,7 +36,9 @@ def register_tools() -> None:
         M4: svn, requirement, project, tag
         M5: mindmap, standard
     """
-    from .domains import hello  # noqa: F401  (注册 sql_er 等工具)
+    from .domains import hello  # noqa: F401  (占位连通测试)
+    from .domains.sql_er import tools as sql_er_tools  # noqa: F401  (注册 sql_er_from_ddl)
+    from .domains.sql_validate import tools as sql_validate_tools  # noqa: F401  (注册 sql_validate_script)
 
 
 def run() -> None:

@@ -160,14 +160,14 @@ littledotmcp 项目任务计划（WBS）
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M2-01 | sqlglot 集成与方言检测（hive/doris/oracle/mysql 启发式） | ⬜ |
-| M2-02 | DDL 解析器：三方言 CREATE TABLE → Table 模型 | ⬜ |
-| M2-03 | ER 图生成：Table 集合 → Mermaid erDiagram | ⬜ |
-| M2-04 | L1 静态校验：语法 + 语义规则 | ⬜ |
-| M2-05 | L2 真实库校验适配：SqlValidator 接口 + 三库适配骨架 | ⬜ |
-| M2-06 | sql_er_from_ddl 工具注册 | ⬜ |
-| M2-07 | sql_validate_script 工具注册 | ⬜ |
-| M2-08 | golden 测试与已知限制清单维护 | ⬜ |
+| M2-01 | sqlglot 集成与方言检测（hive/doris/oracle/mysql 启发式） | ✅ |
+| M2-02 | DDL 解析器：三方言 CREATE TABLE → Table 模型 | ✅ |
+| M2-03 | ER 图生成：Table 集合 → Mermaid erDiagram | ✅ |
+| M2-04 | L1 静态校验：语法 + 语义规则 | ✅ |
+| M2-05 | L2 真实库校验适配：SqlValidator 接口 + 三库适配骨架 | ✅ |
+| M2-06 | sql_er_from_ddl 工具注册 | ✅ |
+| M2-07 | sql_validate_script 工具注册 | ✅ |
+| M2-08 | golden 测试与已知限制清单维护 | ✅ |
 
 **M2-01 sqlglot 集成与方言检测**
 - 说明：`domains/sql_er/dialect.py`：方言映射（hive/doris/oracle/mysql）；关键字启发式检测（Hive `PARTITIONED BY`/`STORED AS`、Oracle `VARCHAR2`/`NUMBER`、Doris MySQL 兼容特征），失败可由调用方指定。

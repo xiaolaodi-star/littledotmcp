@@ -14,6 +14,7 @@ dependencies = [
     "starlette>=0.37",
     "sqlalchemy>=2.0",
     "argon2-cffi>=23.1",
+    "sqlglot>=30.16.0",
 ]
 
 # 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot/chromadb 等见 docs/PLAN.md）
@@ -42,6 +43,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+# 中文全角标点为本项目正常文案风格，非错误
+ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
