@@ -1,0 +1,51 @@
+[project]
+name = "littledotmcp"
+version = "0.1.0"
+description = "个人 MCP 开发工具箱：SQL→ER 图、SQL 校验、文档管理、SVN、思维导图、规范、RAG 知识库、项目进度、标签、需求生命周期"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary — 禁止商用，未经版权人书面许可不得复制/修改/分发/二次开发" }
+authors = [{ name = "Zhushihang" }]
+keywords = ["mcp", "sql", "er-diagram", "rag", "svn", "knowledge-base", "toolkit"]
+dependencies = [
+    "mcp>=1.9.0,<2.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "starlette>=0.37",
+]
+
+# 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot/chromadb 等见 docs/PLAN.md）
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+littledotmcp = "littledotmcp.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/littledotmcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+ignore_missing_imports = true

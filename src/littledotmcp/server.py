@@ -1,0 +1,53 @@
+"""FastMCP 服务组装与启动（S0.2 / S0.6）。
+
+- 单一 FastMCP 实例，stdio 与 streamable-http 双传输由 MCP_TRANSPORT 决定
+- http 模式强制 Bearer Token 鉴权（见 auth 中间件，M6 完善）
+- 工具按域前缀命名：sql_er_* / sql_validate_* / doc_* / kb_* / svn_* /
+  mindmap_* / standard_* / project_* / tag_* / requirement_*
+"""
+
+from __future__ import annotations
+
+from mcp.server.fastmcp import FastMCP
+
+from .config import get_settings
+from .common.logging import get_logger
+
+logger = get_logger(__name__)
+
+settings = get_settings()
+
+# 统一服务名；http 相关参数预置，run 时按 transport 选择
+mcp = FastMCP(
+    "littledotmcp",
+    host=settings.http_host,
+    port=settings.http_port,
+    streamable_http_path="/mcp",
+)
+
+
+def register_tools() -> None:
+    """导入各域工具模块，触发 @mcp.tool 注册。
+
+    按里程碑推进逐步解除注释：
+        M0: hello（占位）
+        M2: sql_er, sql_validate
+        M3: doc, kb
+        M4: svn, requirement, project, tag
+        M5: mindmap, standard
+    """
+    from .domains import hello  # noqa: F401  (注册 sql_er 等工具)
+
+
+def run() -> None:
+    """依据配置启动传输。"""
+    transport = settings.mcp_transport
+    if transport == "http":
+        settings.require_http_auth()
+        logger.info("启动 streamable-http 传输 host=%s port=%s", settings.http_host, settings.http_port)
+        mcp.run(transport="streamable-http")
+    elif transport == "stdio":
+        logger.info("启动 stdio 传输")
+        mcp.run(transport="stdio")
+    else:
+        raise SystemExit(f"不支持的 MCP_TRANSPORT={transport!r}（可选 stdio/http）")
