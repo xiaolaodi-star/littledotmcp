@@ -14,7 +14,7 @@
 | L-002 | M2 | Hive 外部表/分区表等方言特性的语义差异 | 解析结果与真实库不完全等价 | 以"参考性 ER/校验"定位，标注方言；L2 真实库校验为准 |
 | L-003 | M3 | 企业微信文档/微盘 API 权限与成熟度限制 | 企微存储功能受限 | DocStorage 抽象隔离；备选"本地为主 + 企微机器人通知" |
 | L-004 | M4 | 需系统安装 svn 客户端（Python 无成熟纯库） | svn 功能依赖外部命令 | 文档明确要求；Windows 提示 TortoiseSVN CLI |
-| L-005 | M6 | ChromaDB 等原生依赖在不同平台/镜像存在兼容风险 | 部署兼容 | VectorStore 接口可切 sqlite-vec/Redis/pgvector；Docker 内置依赖 |
+| L-005 | M6 | ChromaDB 等原生依赖在不同平台存在兼容风险 | 部署兼容 | VectorStore 接口可切 sqlite-vec/Redis/pgvector；uv 本地安装规避 |
 | L-006 | M3 | LLM 服务不可用时部分能力受限 | kb_ask/mindmap 降级 | 无 Key 时 kb_search/标题解析降级路径可用；Embedding 缓存降本 |
 
 > 新增限制必须追加行并引用触发里程碑。

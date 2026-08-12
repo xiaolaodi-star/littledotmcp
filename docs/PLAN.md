@@ -33,7 +33,7 @@ littledotmcp 项目任务计划（WBS）
 三种部署形态（同一套代码）：
 1. 个人本地：`stdio` 传输，被 MCP 客户端拉起；
 2. 服务端远程：`streamable-http` + HTTPS + Token 鉴权；
-3. 打包给别人：Docker Compose + 空知识库初始化，每人只用自己导入的知识。
+3. 打包给别人：uv 可执行/源码包 + 空知识库初始化，每人只用自己导入的知识。
 
 ---
 
@@ -358,7 +358,7 @@ littledotmcp 项目任务计划（WBS）
 | M6-01 | Streamable HTTP 传输：uvicorn/Starlette 起 /mcp | ⬜ |
 | M6-02 | Token 鉴权 + 限流：Bearer 校验、速率限制、审计 | ⬜ |
 | M6-03 | Nginx/Caddy 反代模板：HTTPS 443 → /mcp | ⬜ |
-| M6-04 | Dockerfile + docker-compose（app + SQLite 卷，可选 Ollama） | ⬜ |
+| M6-04 | uv 打包交付：可执行/源码包（数据目录持久化，可选 Ollama） | ⬜ |
 | M6-05 | 空知识库初始化：首次启动建库、无用户数据 | ⬜ |
 | M6-06 | 使用文档与许可：README 部署/配置/知识重置、LICENSE | ⬜ |
 | M6-07 | 端到端验收：stdio / 远程 / 打包三形态 | ⬜ |
@@ -378,13 +378,13 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：模板随仓库交付；注释清晰可改。
 - 依赖：M6-02；规模：S；关键文件：`deploy/`。
 
-**M6-04 Docker 打包**
-- 说明：`Dockerfile`（python:3.12-slim + uv 安装 + 非 root 运行）+ `docker-compose.yml`（app 挂载 data 卷；可选 Ollama 服务）；镜像内置 chromadb 等原生依赖规避平台问题。
-- 验收标准：`docker compose up` 起通；数据持久化；权限最小化。
-- 依赖：M1/M2/M3 依赖就绪；规模：M；关键文件：`Dockerfile`、`docker-compose.yml`。
+**M6-04 uv 打包交付**
+- 说明：`uv build` 产出 wheel + sdist 源码包；pyproject `[project.scripts]` 提供 `littledotmcp` 可执行入口（可选 uvx 运行）；`data/` 数据目录随首次启动初始化；chromadb 等原生依赖经 uv 本地安装规避平台问题。
+- 验收标准：干净环境 `uv sync` + `uv run littledotmcp` 可启动；数据持久化于 `data/`；依赖经 uv.lock 锁定。
+- 依赖：M1/M2/M3 依赖就绪；规模：M；关键文件：`pyproject.toml`、`scripts/`。
 
 **M6-05 空知识库初始化**
-- 说明：容器/新部署首次启动自动建库且无任何用户数据；`STANDARD_TEMPLATES=1` 时注入规范示例（可删除）；提供"知识重置"脚本（清空 data/）。
+- 说明：新部署首次启动自动建库且无任何用户数据；`STANDARD_TEMPLATES=1` 时注入规范示例（可删除）；提供"知识重置"脚本（清空 data/）。
 - 验收标准：全新部署为空；注入模板可选；重置脚本可用。
 - 依赖：M6-04 + M1-03；规模：S；关键文件：`scripts/init_db.py`、`scripts/reset_data.py`。
 
@@ -484,7 +484,7 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M6-01 | Streamable HTTP | M0-03 | ⬜ | |
 | M6-02 | Token 鉴权 + 限流 | M6-01/M1-05 | ⬜ | |
 | M6-03 | 反代模板 | M6-02 | ⬜ | |
-| M6-04 | Docker 打包 | M1/M2/M3 | ⬜ | |
+| M6-04 | uv 打包交付 | M1/M2/M3 | ⬜ | |
 | M6-05 | 空知识库初始化 | M6-04/M1-03 | ⬜ | |
 | M6-06 | 使用文档与许可 | M6-05 | ⬜ | |
 | M6-07 | 端到端验收 | M6-01~06 | ⬜ | |
@@ -497,7 +497,7 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 |------|------|------|
 | Hive/Doris 方言解析边缘用例 | ER/校验准确性 | 只承诺 DDL 子集；维护已知限制清单；必要时预规范化后再解析（M2-08） |
 | 企微文档 API 成熟度/权限限制 | 文档管理主链受阻 | DocStorage 抽象隔离影响；备选"本地为主 + 企微机器人通知"（M3-03） |
-| chromadb/sqlite-vec 原生依赖兼容 | 打包与平台兼容 | VectorStore 接口抽象可切 Redis/pgvector；Docker 镜像内置依赖（M6-04） |
+| chromadb/sqlite-vec 原生依赖兼容 | 打包与平台兼容 | VectorStore 接口抽象可切 Redis/pgvector；uv 本地安装规避（M6-04） |
 | 多用户隔离漏洞 | 他人看到自己之外数据 | owner_id 过滤下沉 Repository/VectorStore 强制注入；隔离集成测试守门（M1-08/M3-09） |
 | Python 无纯 SVN 库 | svn 能力受限 | subprocess 封装 CLI，文档要求安装 svn client；参数化传参防注入（M4-01） |
 | MCP SDK 演进 | 破坏性变更 | uv.lock 锁定；升级评估登记（XC-05） |

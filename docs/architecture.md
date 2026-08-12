@@ -41,7 +41,7 @@
 - **ADR-3 多租户隔离**：所有数据表 owner_id；Repository 层强制拼接；
   向量 metadata 强制注入 owner_id；交付 = 空知识库 + 各自数据。
 - **ADR-4 存储默认零中间件**：SQLite + 本地文件 + ChromaDB 持久化目录，
-  打包给别人不强制装 MySQL/Redis。
+  打包给别人不强制装 MySQL/Redis；交付用 uv 可执行/源码包，本地安装即可运行，无需容器化。
 - **ADR-5 SQL 域**：sqlglot（hive/doris/oracle/mysql）+ 自研 DDL 子集解析与 L1 语义规则；
   L2 真实库校验走 SqlValidator 适配接口。范围锁定"小型脚本"，复杂特性入已知限制。
 - **ADR-6 部署**：同一套代码三形态；远程仅 HTTPS 反代 + Bearer Token（首期），
