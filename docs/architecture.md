@@ -50,5 +50,14 @@
   storage_key、防路径穿越、owner 分目录）；元数据落 `documents` 表经
   `OwnerScopedRepository` 强制隔离；provider 恒 LOCAL（企微后端随 M3-03 延后）；
   解析器 `rag/parsers` 按扩展名路由 txt/md/pdf/docx，损坏文件可读报错。
+- **ADR-8 kb 域 RAG（M3-05~09 落地，真实 LLM/Embedding 随 M7）**：RAG 链路
+  采用"抽象隔离 + 离线 Fake 验收"：`rag/chunker`（中文分句 + token 预算 +
+  10% 重叠 + 锚点）、`rag/embedding.Embedder` 抽象（真实 OpenAI/Ollama 后端
+  留 M7）、`rag/vector_store` 抽象 + `ChromaVectorStore`（`VECTOR_DIR` 持久化，
+  **metadata 强制注入 owner_id 且检索强制 where 过滤**，多条件 delete 显式
+  `$and`）；kb 域工具 `kb_ingest`（doc 原文→解析→切块→embed→kb_documents/
+  kb_chunks + 向量 upsert，同源幂等）/ `kb_search`（向量 Top-K + 本地 BM25
+  自实现融合，返回来源引用）/ `kb_list` / `kb_delete`（chunks→向量→doc 事务
+  一致）；`kb_ask` 与真实 Embedding 后端按用户决策剥离至 M7。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

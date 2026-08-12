@@ -32,7 +32,7 @@ def register_tools() -> None:
     按里程碑推进逐步解除注释：
         M0: hello（占位）
         M2: sql_er, sql_validate
-        M3: doc（kb 待 M3-05~09 里程碑）
+        M3: doc, kb（kb_ask 与真实 Embedding 待 M7）
         M4: svn, requirement, project, tag
         M5: mindmap, standard
     """
@@ -40,6 +40,7 @@ def register_tools() -> None:
     from .domains.doc import (
         tools as doc_tools,  # noqa: F401  (注册 doc_save/read/search/list/delete)
     )
+    from .domains.kb import tools as kb_tools  # noqa: F401  (注册 kb_ingest/search/list/delete)
     from .domains.sql_er import tools as sql_er_tools  # noqa: F401  (注册 sql_er_from_ddl)
     from .domains.sql_validate import (
         tools as sql_validate_tools,  # noqa: F401  (注册 sql_validate_script)

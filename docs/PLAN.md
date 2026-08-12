@@ -212,11 +212,12 @@ littledotmcp 项目任务计划（WBS）
 | M3-02 | DocStorage 抽象 + 本地实现（防穿越） | ✅ 2026-08-12 |
 | M3-03 | 企业微信实现：微盘/文档 API 客户端骨架 | ⏸ 延后至后续里程碑 |
 | M3-04 | doc 域工具：doc_save/read/search/list/delete | ✅ 2026-08-12 |
-| M3-05 | 切块器：中文感知、500~800 token、10% 重叠 | ⬜ |
-| M3-06 | Embedding 抽象：OpenAI 兼容 + Ollama、结果缓存 | ⬜ |
-| M3-07 | VectorStore 抽象 + ChromaDB 持久化（metadata 强制 owner_id） | ⬜ |
-| M3-08 | RAG 检索问答：向量+BM25 混合、来源引用、kb_* 工具 | ⬜ |
-| M3-09 | 用户隔离与成本控制：隔离测试 + embedding 缓存验证 | ⬜ |
+| M3-05 | 切块器：中文感知、500~800 token、10% 重叠 | ✅ 2026-08-13 |
+| M3-06 | Embedding 抽象：FakeEmbedder 离线验收；真实 OpenAI/Ollama 后端 | ✅ 2026-08-13（真实后端剥离 M7） |
+| M3-07 | VectorStore 抽象 + ChromaDB 持久化（metadata 强制 owner_id） | ✅ 2026-08-13 |
+| M3-08 | RAG 检索问答：kb_ingest/search/list/delete + 向量+BM25 混合；kb_ask | ✅ 2026-08-13（kb_ask 剥离 M7） |
+| M3-09 | 用户隔离与成本控制：隔离测试 + FakeEmbedder 缓存验证 | ✅ 2026-08-13 |
+| M7 | 真实 Embedding（OpenAI 兼容/Ollama）+ kb_ask（LLM 生成）+ 成本验证 | ⬜ 新增里程碑 |
 
 **M3-01 文档解析器集合**
 - 说明：`rag/parsers.py`：按扩展名路由 txt/md（原生）、pdf（pypdf/pdfplumber）、docx（python-docx）；解析失败记录并跳过；返回文本+元信息（页数/字符数）。
@@ -239,29 +240,34 @@ littledotmcp 项目任务计划（WBS）
 - 依赖：M3-02 + M1-04；规模：M；关键文件：`domains/doc/tools.py`。
 
 **M3-05 切块器**
-- 说明：`rag/chunker.py`：中文感知分句（按标点/换行）+ 按字符/token 预算切块（500~800 token，10% 重叠），保留块序号与来源锚点。
-- 验收标准：中文样例切块质量符合预期；超长段落正确拆分；重叠率可测。
-- 依赖：M3-01；规模：M；关键文件：`rag/chunker.py`。
+- 说明：`rag/chunker.py`：中文感知分句（按标点/换行）+ token 估算预算切块（默认 800 token，10% 重叠），保留块序号与来源锚点（start/end 字符偏移）；超长句按窗口硬切。
+- 验收标准：中文样例切块质量符合预期；超长段落正确拆分；重叠率可测；锚点与原文可回验。
+- 依赖：M3-01；规模：M；关键文件：`rag/chunker.py`。✅ 2026-08-13。
 
-**M3-06 Embedding 抽象**
-- 说明：`rag/embedding.py`：`Embedder` 抽象；OpenAI 兼容（httpx/openai SDK，默认百炼/DeepSeek 等）+ Ollama 离线；结果哈希缓存到本地（避免重复计费）；批量接口。
-- 验收标准：两种后端可切换；同文本二次调用命中缓存。
-- 依赖：M1-07 + `uv add openai httpx`；规模：M；关键文件：`rag/embedding.py`。
+**M3-06 Embedding 抽象（真实后端剥离 M7）**
+- 说明：`rag/embedding.py`：`Embedder` 抽象（批量 embed、维度属性）；`FakeEmbedder` 确定性哈希向量 + 进程内缓存命中计数，供离线验收（不联网、零成本）；真实 OpenAI 兼容（httpx/openai SDK）+ Ollama 离线实现与结果持久化缓存剥离至 **M7**。
+- 验收标准（本次）：FakeEmbedder 同文本同向量；L2 归一化；缓存命中计数正确。
+- 依赖：M3-05；规模：M；关键文件：`rag/embedding.py`。✅ 2026-08-13。
 
 **M3-07 VectorStore 抽象 + ChromaDB**
-- 说明：`rag/vector_store.py`：`VectorStore` 抽象（upsert/search/delete_by_doc）；ChromaDB 持久化实现（`VECTOR_DIR`）；**所有 metadata 强制注入 owner_id（调用方不可覆盖）**；接口可切 sqlite-vec/Redis/pgvector。
-- 验收标准：upsert/search/delete 测试；owner 过滤生效（A 搜不到 B）；持久化重启不丢。
-- 依赖：M3-06 + `uv add chromadb`；规模：M；关键文件：`rag/vector_store.py`。
+- 说明：`rag/vector_store.py`：`VectorStore` 抽象（upsert/search/delete_by_doc）；`ChromaVectorStore` 基于 `chromadb.PersistentClient`（`VECTOR_DIR`）持久化；**所有 metadata 强制注入 owner_id/doc_id（调用方不可覆盖）**；检索强制 where 过滤 owner_id；接口可切 sqlite-vec/Redis/pgvector。
+- 验收标准：upsert/search/delete 测试；owner 过滤生效（A 搜不到 B）；持久化重启不丢；多条件 delete 用 `$and`。
+- 依赖：M3-06 + `uv add chromadb`；规模：M；关键文件：`rag/vector_store.py`。✅ 2026-08-13。
 
-**M3-08 RAG 检索问答**
-- 说明：`domains/kb/`：`kb_ingest`（解析→切块→embed→入库，更新 kb_documents/kb_chunks 与向量）、`kb_search`（向量 Top-K + 关键词 BM25 混合，owner/project/标签过滤）、`kb_ask`（检索上下文→LLM 生成，附来源引用）、`kb_delete/kb_list`。
-- 验收标准：入库→提问→带引用回答全链路；无 LLM Key 时 kb_search 仍可用。
-- 依赖：M3-05/06/07 + M3-04；规模：L；关键文件：`domains/kb/*.py`。
+**M3-08 RAG 检索问答（kb_ask 剥离 M7）**
+- 说明：`domains/kb/`：`kb_ingest`（读 doc 原文→解析→切块→embed→写 kb_documents/kb_chunks + 向量 upsert，同源幂等重建）、`kb_search`（向量 Top-K + 本地 BM25 混合融合，owner 强制隔离，返回 doc_id/title/seq/content/score 来源引用）、`kb_list`/`kb_delete`（chunks→向量→doc 事务一致）；`kb_ask`（检索上下文→LLM 生成）剥离至 **M7**。
+- 验收标准：入库→检索→带来源引用全链路；A/B 用户数据互不可见；无 Key 环境 kb_search 可用。
+- 依赖：M3-05/06/07 + M3-04；规模：L；关键文件：`domains/kb/*.py`。✅ 2026-08-13（kb_ask 除外）。
 
 **M3-09 用户隔离与成本控制**
-- 说明：kb 域隔离测试（A/B 用户文档互不可见，向量+元数据双层验证）；embedding 缓存命中率验证；RAG 响应 <1s 目标（个人规模）。
+- 说明：kb 域隔离测试（A/B 用户文档互不可见，**向量 + 元数据双层验证**）；FakeEmbedder 缓存命中验证（真实成本验证随 M7）；RAG 本地检索 <1s 目标（个人规模，ChromaDB 本地持久化预期达标）。
 - 验收标准：隔离测试全绿；缓存生效；性能目标达成（或记录偏差）。
-- 依赖：M3-08；规模：M；关键文件：`tests/test_kb_isolation.py`。
+- 依赖：M3-08；规模：M；关键文件：`tests/test_kb_isolation.py`。✅ 2026-08-13。
+
+**M7 真实 Embedding + kb_ask（新增里程碑，2026-08-13 用户决策剥离）**
+- 说明：`rag/embedding.py` 补 `OpenAICompatEmbedder`（httpx/openai SDK，默认百炼/DeepSeek 等）/ `OllamaEmbedder`，结果哈希持久化缓存（避免重复计费）；`domains/kb/tools.py` 补 `kb_ask`（kb_search 上下文 → LLM 生成带引用回答）；M3-09 成本验证（真实 embedding 缓存命中率、LLM token 统计）。
+- 验收标准：两种后端可切换且缓存命中；kb_ask 全链路带引用；无 LLM Key 时明确降级提示。
+- 依赖：M3-06/08 + `uv add openai httpx`；规模：L；关键文件：`rag/embedding.py`、`domains/kb/tools.py`。
 
 ### M4 SVN/需求/项目/标签（依赖：M1）
 
@@ -422,6 +428,7 @@ M1: M1-01 → M1-02 → M1-03；M1-04（依赖 01/02）；M1-05（依赖 01）
 M2: M2-01 → M2-02 → M2-03、M2-04 → M2-06/M2-07；M2-05（依赖 02）；M2-08（依赖 02/03/04）
 M3: M3-01 → M3-05 → M3-06 → M3-07 → M3-08 → M3-09
     M3-02 → M3-03 → M3-04；M3-08 依赖 M3-04
+M7: M3-06/08（真实 Embedding 后端 + kb_ask）
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
     M4-08（依赖 03/05/06/07）
 M5: M5-01 → M5-02 → M5-03；M5-04 → M5-05
@@ -463,11 +470,12 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M3-02 | DocStorage 本地实现 | M1-04 | ✅ | 2026-08-12 |
 | M3-03 | 企业微信实现 | M3-02 | ⏸ | 延后至后续里程碑 |
 | M3-04 | doc 域工具 | M3-02 | ✅ | 2026-08-12（provider 恒 LOCAL） |
-| M3-05 | 切块器 | M3-01 | ⬜ | |
-| M3-06 | Embedding 抽象 | M1-07 | ⬜ | |
-| M3-07 | VectorStore + ChromaDB | M3-06 | ⬜ | |
-| M3-08 | RAG 检索问答 | M3-05/06/07/04 | ⬜ | |
-| M3-09 | 用户隔离与成本控制 | M3-08 | ⬜ | |
+| M3-05 | 切块器 | M3-01 | ✅ | 2026-08-13 |
+| M3-06 | Embedding 抽象 | M3-05 | ✅ | 2026-08-13（真实后端→M7） |
+| M3-07 | VectorStore + ChromaDB | M3-06 | ✅ | 2026-08-13 |
+| M3-08 | RAG 检索问答 | M3-05/06/07/04 | ✅ | 2026-08-13（kb_ask→M7） |
+| M3-09 | 用户隔离与成本控制 | M3-08 | ✅ | 2026-08-13 |
+| M7 | 真实 Embedding + kb_ask | M3-06/08 | ⬜ | 新增里程碑 |
 | M4-01 | svn CLI 封装 | M1-01 | ⬜ | |
 | M4-02 | 凭据管理 | M4-01 | ⬜ | |
 | M4-03 | svn 域工具 | M4-01/02 | ⬜ | |
