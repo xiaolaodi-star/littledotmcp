@@ -6,7 +6,7 @@
 
 # littledotmcp 架构设计（知识库）
 
-> 维护者：朱世航 ｜ 最后更新：2026-08-12 ｜ 状态：M0 起逐里程碑落地
+> 维护者：朱世航 ｜ 最后更新：2026-08-13 ｜ 状态：M0 起逐里程碑落地
 
 ## 1. 定位
 
@@ -27,7 +27,7 @@
    sql_er │ sql_validate │ doc │ svn │ mindmap │ standard │ kb │ project │ tag │ requirement
    ▼
 基础设施层
-   SQLAlchemy(SQLite 默认/MySQL·PG 可选，全表 owner_id) │ VectorStore(ChromaDB 默认，可切)
+   SQLAlchemy(SQLite 默认/MySQL·PG 可选，全表 owner_id) │ VectorStore(sqlite-vec 默认，可切)
    │ 本地文件 + 企微 API │ svn CLI（凭据加密）│ LLM/Embedding（OpenAI 兼容 / Ollama）
 ```
 
@@ -40,7 +40,7 @@
   未来按包边界可拆独立 MCP server（演进路径，不提前做）。
 - **ADR-3 多租户隔离**：所有数据表 owner_id；Repository 层强制拼接；
   向量 metadata 强制注入 owner_id；交付 = 空知识库 + 各自数据。
-- **ADR-4 存储默认零中间件**：SQLite + 本地文件 + ChromaDB 持久化目录，
+- **ADR-4 存储默认零中间件**：SQLite + 本地文件 + sqlite-vec 向量库，
   打包给别人不强制装 MySQL/Redis；交付用 uv 可执行/源码包，本地安装即可运行，无需容器化。
 - **ADR-5 SQL 域**：sqlglot（hive/doris/oracle/mysql）+ 自研 DDL 子集解析与 L1 语义规则；
   L2 真实库校验走 SqlValidator 适配接口。范围锁定"小型脚本"，复杂特性入已知限制。
@@ -53,11 +53,27 @@
 - **ADR-8 kb 域 RAG（M3-05~09 落地，真实 LLM/Embedding 随 M7）**：RAG 链路
   采用"抽象隔离 + 离线 Fake 验收"：`rag/chunker`（中文分句 + token 预算 +
   10% 重叠 + 锚点）、`rag/embedding.Embedder` 抽象（真实 OpenAI/Ollama 后端
-  留 M7）、`rag/vector_store` 抽象 + `ChromaVectorStore`（`VECTOR_DIR` 持久化，
-  **metadata 强制注入 owner_id 且检索强制 where 过滤**，多条件 delete 显式
-  `$and`）；kb 域工具 `kb_ingest`（doc 原文→解析→切块→embed→kb_documents/
+  留 M7）、`rag/vector_store` 抽象 + `SqliteVecVectorStore`（sqlite-vec 扩展，
+  `VECTOR_DIR` 下 `kb_vectors.db`，**检索强制 owner_id 过滤**；2026-08-13 因
+  chromadb 1.5.9 Rust 绑定在 Windows+Py3.12 崩溃，经用户决策完全替换 chromadb）；
+  kb 域工具 `kb_ingest`（doc 原文→解析→切块→embed→kb_documents/
   kb_chunks + 向量 upsert，同源幂等）/ `kb_search`（向量 Top-K + 本地 BM25
   自实现融合，返回来源引用）/ `kb_list` / `kb_delete`（chunks→向量→doc 事务
   一致）；`kb_ask` 与真实 Embedding 后端按用户决策剥离至 M7。
+- **ADR-9 M4 四域（svn/requirement/project/tag，2026-08-13 落地简化版）**：
+  svn 域采用 `SvnClient` 抽象 + `LocalFakeSvnClient`（临时目录模拟，无需真实
+  svn CLI，凭据加解密用标准库实现）；requirement 域实现状态枚举
+  DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED 与 LLM 降级评估；project 域实现
+  项目/里程碑/任务三级仓储，`project_remove` 手动级联删除（SQLite 默认不启用
+  外键）；tag 域 tags+entity_tags 多态。M4-08 追溯链路待细化。
+- **ADR-10 mindmap/standard 域（M5，2026-08-13 落地）**：mindmap 域
+  `model.py` 维护 `MindNode` 树与 Mermaid mindmap 文本双向转换（支持
+  `id((...))` 形状、唯一根、缩进层级校验），`export.py` 树→OPML（XML 转义），
+  `from_doc.py` `summarize_outline` 优先调用 OpenAI 兼容 LLM（标准库 urllib，
+  复用 `llm_*` 配置），无 Key/异常降级按 Markdown 标题层级解析；standard 域
+  规范注册/检索（`OwnerScopedRepository` 隔离），内置模板经
+  `scripts/seed_standards.py`（`STANDARD_TEMPLATES=1`）可选注入；
+  `resources/standards.py` 注册 Resource 模板 `standard://{name}` + Prompt
+  `review_by_standard`。依赖零新增（LLM SDK 留 M7）。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

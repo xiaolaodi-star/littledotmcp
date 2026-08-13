@@ -1,8 +1,4 @@
-"""M3-09 golden 测试：kb 域 A/B 双层隔离（向量 + 元数据）。
-
-强制项：用户隔离测试（规约-04）。验证向量库层与元数据层对跨用户数据
-互不可见，且 BM25 关键词增强在隔离范围内正常工作。
-"""
+"""M3-09 golden tests: kb layer A/B double isolation (vector + metadata)."""
 
 from __future__ import annotations
 
@@ -16,7 +12,7 @@ from littledotmcp.db import engine as db_engine
 from littledotmcp.domains.doc.tools import doc_save
 from littledotmcp.domains.kb.storage import KbChunkRepository, KbDocumentRepository
 from littledotmcp.domains.kb.tools import kb_ingest, kb_search
-from littledotmcp.rag.vector_store import ChromaVectorStore
+from littledotmcp.rag.vector_store import SqliteVecVectorStore
 
 OWNER_A = "owner-a"
 OWNER_B = "owner-b"
@@ -54,27 +50,25 @@ def _ingest(
 
 
 def _vector_count(owner: str) -> int:
-    return ChromaVectorStore(get_settings().vector_dir, dim=_DIM).count(owner)
+    return SqliteVecVectorStore(get_settings().vector_dir, dim=_DIM).count(owner)
 
 
 def test_vector_and_metadata_double_isolation(
     schema: None, isolated_settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    a_id = _ingest(OWNER_A, monkeypatch, name="A方案.md", content="A 的机密方案内容。")
-    b_id = _ingest(OWNER_B, monkeypatch, name="B花园.md", content="B 的花园种植笔记。")
+    a_id = _ingest(OWNER_A, monkeypatch, name="A-plan.md", content="A secret plan content")
+    b_id = _ingest(OWNER_B, monkeypatch, name="B-garden.md", content="B garden planting notes")
 
-    # 向量层：按 owner 物理隔离
     assert _vector_count(OWNER_A) >= 1
     assert _vector_count(OWNER_B) >= 1
 
-    # 检索层：A 搜不到 B 的内容（含 BM25 与向量）
     _set_owner(monkeypatch, OWNER_A)
-    res_a = kb_search("花园")
+    res_a = kb_search("garden")
     assert res_a["success"] is True
     assert all(item["doc_id"] == a_id for item in res_a["data"]["items"])
 
     _set_owner(monkeypatch, OWNER_B)
-    res_b = kb_search("机密")
+    res_b = kb_search("secret")
     assert res_b["success"] is True
     assert all(item["doc_id"] == b_id for item in res_b["data"]["items"])
 
@@ -82,8 +76,8 @@ def test_vector_and_metadata_double_isolation(
 def test_metadata_repository_scope(
     schema: None, isolated_settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    a_id = _ingest(OWNER_A, monkeypatch, name="A.md", content="A 的内容。")
-    b_id = _ingest(OWNER_B, monkeypatch, name="B.md", content="B 的内容。")
+    a_id = _ingest(OWNER_A, monkeypatch, name="A.md", content="A content")
+    b_id = _ingest(OWNER_B, monkeypatch, name="B.md", content="B content")
 
     with db_engine.SessionLocal() as session:
         docs_a = KbDocumentRepository(session).list_by_owner(OWNER_A)
@@ -101,13 +95,13 @@ def test_bm25_enhances_keyword_match(
     a_id = _ingest(
         OWNER_A,
         monkeypatch,
-        name="月季.md",
-        content="月季。月季。月季。月季需要充足阳光。",
+        name="spring.md",
+        content="Spring. Spring. Spring. Spring needs plenty of sunlight.",
     )
-    _ingest(OWNER_B, monkeypatch, name="牡丹.md", content="牡丹喜肥。牡丹怕涝。")
+    _ingest(OWNER_B, monkeypatch, name="winter.md", content="Winter is cold. Snow falls.")
 
     _set_owner(monkeypatch, OWNER_A)
-    res = kb_search("月季")
+    res = kb_search("Spring")
     assert res["success"] is True
     assert res["data"]["count"] >= 1
     top = res["data"]["items"][0]

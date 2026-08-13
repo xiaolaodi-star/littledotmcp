@@ -19,10 +19,10 @@ dependencies = [
     "pdfplumber>=0.11.10",
     "python-docx>=1.2.0",
     "markdown>=3.10.3",
-    "chromadb>=1.5.9",
+    "sqlite-vec>=0.1.9",
 ]
 
-# 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot/chromadb 等见 docs/PLAN.md）
+# 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot 等见 docs/PLAN.md）
 [dependency-groups]
 dev = [
     "pytest>=8.0",

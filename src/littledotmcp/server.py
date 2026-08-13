@@ -41,9 +41,18 @@ def register_tools() -> None:
         tools as doc_tools,  # noqa: F401  (注册 doc_save/read/search/list/delete)
     )
     from .domains.kb import tools as kb_tools  # noqa: F401  (注册 kb_ingest/search/list/delete)
+    from .domains.mindmap import tools as mindmap_tools  # noqa: F401  (注册 mindmap_* 工具)
+    from .domains.project import tools as proj_tools  # noqa: F401  (注册 project_* 工具)
+    from .domains.requirement import tools as req_tools  # noqa: F401  (注册 requirement_* 工具)
     from .domains.sql_er import tools as sql_er_tools  # noqa: F401  (注册 sql_er_from_ddl)
     from .domains.sql_validate import (
         tools as sql_validate_tools,  # noqa: F401  (注册 sql_validate_script)
+    )
+    from .domains.standard import tools as standard_tools  # noqa: F401  (注册 standard_* 工具)
+    from .domains.svn import tools as svn_tools  # noqa: F401  (注册 svn_* 工具)
+    from .domains.tag import tools as tag_tools  # noqa: F401  (注册 tag_* 工具)
+    from .resources import (
+        standards as standards_resources,  # noqa: F401  (注册 standard:// Resource + Prompt)
     )
 
 

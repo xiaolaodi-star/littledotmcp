@@ -4,7 +4,7 @@
   剥离至 M7 里程碑，本文件不暴露半成品接口；
 - 向量化本次用确定性 FakeEmbedder（离线可验收），M7 切换为真实 Embedder 即可热插拔；
 - 元数据落 kb_documents/kb_chunks（OwnerScopedRepository 强制 owner 隔离），
-  向量落 ChromaVectorStore（metadata 强制注入 owner_id）。
+  向量落 SqliteVecVectorStore（owner_id/doc_id 强制注入，SQL 层 owner 过滤）。
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from ...domains.doc.tools import DocumentRepository
 from ...rag.chunker import chunk_text
 from ...rag.embedding import FakeEmbedder
 from ...rag.parsers import ParseError, parse_document
-from ...rag.vector_store import ChromaVectorStore
+from ...rag.vector_store import SqliteVecVectorStore
 from ...server import mcp
 from .ranking import bm25_scores
 from .storage import KbChunkRepository, KbDocumentRepository
@@ -54,9 +54,9 @@ def _embedder() -> FakeEmbedder:
     return FakeEmbedder(dim=_DIM)
 
 
-def _vector_store() -> ChromaVectorStore:
+def _vector_store() -> SqliteVecVectorStore:
     """延迟创建向量库（随配置实时，便于测试重定向）。"""
-    return ChromaVectorStore(get_settings().vector_dir, dim=_DIM)
+    return SqliteVecVectorStore(get_settings().vector_dir, dim=_DIM)
 
 
 def _storage() -> LocalDocStorage:

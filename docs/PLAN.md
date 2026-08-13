@@ -8,7 +8,7 @@ littledotmcp 项目任务计划（WBS）
 # littledotmcp 项目任务计划（WBS）
 
 > 项目：个人 MCP 开发工具箱 ｜ 语言：Python 3.12 ｜ 框架：官方 mcp SDK（FastMCP）
-> 维护者：朱世航 ｜ 最后更新：2026-08-12
+> 维护者：朱世航 ｜ 最后更新：2026-08-13
 > 关联文档：[架构设计](architecture.md) ｜ [已知限制](limitations.md) ｜ [README](../README.md)
 
 ---
@@ -273,14 +273,14 @@ littledotmcp 项目任务计划（WBS）
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M4-01 | svn CLI 封装：安全调用、超时、输出解析、异常映射 | ⬜ |
-| M4-02 | 凭据管理：加密存储、keyring 抽象、脱敏 | ⬜ |
-| M4-03 | svn 域工具：checkout/update/commit/log/diff/blame/status | ⬜ |
-| M4-04 | 需求状态机：DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED + 流转规则 | ⬜ |
-| M4-05 | 评估与上线流程：影响面报告、上线检查清单 | ⬜ |
-| M4-06 | 项目/里程碑/任务：进度自动计算与汇报 | ⬜ |
-| M4-07 | 跨实体标签：tags + entity_tags 多态、tag_* 工具 | ⬜ |
-| M4-08 | 追溯链路：需求↔SVN 提交↔文档↔标签 | ⬜ |
+| M4-01 | svn CLI 封装：安全调用、超时、输出解析、异常映射 | ✅ 2026-08-13（LocalFakeSvnClient 简化版） |
+| M4-02 | 凭据管理：加密存储、keyring 抽象、脱敏 | ✅ 2026-08-13 |
+| M4-03 | svn 域工具：checkout/update/commit/log/diff/blame/status | ✅ 2026-08-13（模拟实现） |
+| M4-04 | 需求状态机：DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED + 流转规则 | ✅ 2026-08-13（状态枚举+工具，严格流转规则待细化） |
+| M4-05 | 评估与上线流程：影响面报告、上线检查清单 | ✅ 2026-08-13（LLM 评估降级） |
+| M4-06 | 项目/里程碑/任务：进度自动计算与汇报 | ✅ 2026-08-13（手动级联删除，进度自动计算待细化） |
+| M4-07 | 跨实体标签：tags + entity_tags 多态、tag_* 工具 | ✅ 2026-08-13 |
+| M4-08 | 追溯链路：需求↔SVN 提交↔文档↔标签 | ⬜ 待细化 |
 
 **M4-01 svn CLI 封装**
 - 说明：`domains/svn/client.py`：`SvnClient`（subprocess 参数列表化传参防注入、超时、错误码→异常映射、`--xml` 输出解析）；检测 svn 可执行文件并给出安装提示。
@@ -326,36 +326,36 @@ littledotmcp 项目任务计划（WBS）
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M5-01 | Mermaid mindmap 生成/编辑：mindmap_create/update | ⬜ |
-| M5-02 | OPML 导出：mindmap_export（可导入 XMind） | ⬜ |
-| M5-03 | 从文档/知识库生成大纲：mindmap_from_doc | ⬜ |
-| M5-04 | standard 模型与工具：standard_search/get/add | ⬜ |
-| M5-05 | 规范 Resources 注册：standard://{name} + 提示词 | ⬜ |
+| M5-01 | Mermaid mindmap 生成/编辑：mindmap_create/update | ✅ 2026-08-13 |
+| M5-02 | OPML 导出：mindmap_export（可导入 XMind） | ✅ 2026-08-13 |
+| M5-03 | 从文档/知识库生成大纲：mindmap_from_doc | ✅ 2026-08-13（LLM 优先 + 标题降级） |
+| M5-04 | standard 模型与工具：standard_search/get/add | ✅ 2026-08-13 |
+| M5-05 | 规范 Resources 注册：standard://{name} + 提示词 | ✅ 2026-08-13 |
 
 **M5-01 Mermaid mindmap 生成/编辑**
-- 说明：`domains/mindmap/`：树结构 ↔ Mermaid mindmap 文本双向转换；`mindmap_create/update`（持久化 `mindmaps` 表，owner 隔离）；mermaid 语法校验。
-- 验收标准：生成合法 mermaid；编辑往返一致；非法输入被拒。
-- 依赖：M1-04；规模：M；关键文件：`domains/mindmap/*.py`。
+- 说明：`domains/mindmap/model.py`：`MindNode` 树 ↔ Mermaid mindmap 文本双向转换与语法校验（支持 `id((...))` 形状、缩进层级、唯一根）；`storage.py`：`MindmapRepository`（OwnerScopedRepository，`get_by_title`）；`tools.py`：`mindmap_create/update/get/list/remove`（持久化 `mindmaps` 表，mermaid+opml 同步写入）。
+- 验收标准：生成合法 mermaid；编辑往返一致；非法输入（多根/空标题/非 mindmap 开头）被拒；owner 隔离。
+- 依赖：M1-04；规模：M；关键文件：`domains/mindmap/model.py`、`storage.py`、`tools.py`。✅ 2026-08-13。
 
 **M5-02 OPML 导出**
-- 说明：`mindmap_export(format=opml)`：树 → OPML XML（outline 嵌套，可导入 XMind/FreeMind）；转义与编码正确。
-- 验收标准：OPML 校验通过；XMind 可导入（文档验证说明）。
-- 依赖：M5-01；规模：S；关键文件：`domains/mindmap/export.py`。
+- 说明：`domains/mindmap/export.py`：树 → OPML XML（outline 嵌套，UTF-8 + 属性/文本转义，可导入 XMind/FreeMind）；`mindmap_export(format=opml)` 返回 OPML 文本。
+- 验收标准：OPML 可被 XML 解析；转义（`&<>"`）正确；owner 隔离。
+- 依赖：M5-01；规模：S；关键文件：`domains/mindmap/export.py`。✅ 2026-08-13。
 
 **M5-03 从文档生成大纲**
-- 说明：`mindmap_from_doc`：读 kb/doc 文档 → LLM 提炼层级大纲 → 生成思维导图；无 LLM Key 时退回"按标题层级解析"（md 标题/#、docx 标题样式）。
-- 验收标准：样例文档出图；无 Key 降级路径可用。
-- 依赖：M5-01 + M3；规模：M；关键文件：`domains/mindmap/from_doc.py`。
+- 说明：`domains/mindmap/from_doc.py`：`summarize_outline` 优先调 OpenAI 兼容 LLM（`llm_*` 配置，标准库 urllib）提炼层级大纲；无 Key 或异常降级按 Markdown 标题层级解析；`mindmap_from_doc(title, text)` 落库（已存在则更新）。
+- 验收标准：样例文档出图；无 Key 降级路径可用；LLM 返回非合法 mindmap 时降级不崩溃。
+- 依赖：M5-01 + M3；规模：M；关键文件：`domains/mindmap/from_doc.py`。✅ 2026-08-13。
 
 **M5-04 standard 模型与工具**
-- 说明：`standards` 表（owner_id, name, category, version, content_md, is_template）；`standard_add/search/get`（分类/全文检索）；内置模板（命名/SQL/提交/上线清单示例）随空库可选注入。
-- 验收标准：增查正确；示例模板可注入与替换。
-- 依赖：M1-04；规模：S；关键文件：`domains/standard/*.py`。
+- 说明：`standards` 表（owner_id, name, category, content）；`standard_add/search/get/remove`（name 唯一、分类/全文模糊检索）；内置模板（命名/SQL/提交/上线清单）经 `scripts/seed_standards.py`（`STANDARD_TEMPLATES=1`）可选注入，幂等可覆盖。
+- 验收标准：增查正确；示例模板可注入与替换；owner 隔离。
+- 依赖：M1-04；规模：S；关键文件：`domains/standard/*.py`、`scripts/seed_standards.py`。✅ 2026-08-13。
 
 **M5-05 规范 Resources 注册**
-- 说明：将标准注册为 MCP Resource（URI `standard://{name}`）+ Prompt（如"按 SQL 规范校验"）；模型在相关任务中自动加载。
+- 说明：`resources/standards.py`：Resource 模板 `standard://{name}`（读取规范正文 Markdown）+ Prompt `review_by_standard`（按规范评审文本）；随 `server.py register_tools()` 注册。
 - 验收标准：客户端可枚举/读取 standard 资源；Prompt 可被调用。
-- 依赖：M5-04；规模：S；关键文件：`resources/standards.py`、`server.py`。
+- 依赖：M5-04；规模：S；关键文件：`resources/standards.py`、`server.py`。✅ 2026-08-13。
 
 ### M6 远程传输与打包交付（依赖：M2~M5）
 
@@ -476,19 +476,19 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M3-08 | RAG 检索问答 | M3-05/06/07/04 | ✅ | 2026-08-13（kb_ask→M7） |
 | M3-09 | 用户隔离与成本控制 | M3-08 | ✅ | 2026-08-13 |
 | M7 | 真实 Embedding + kb_ask | M3-06/08 | ⬜ | 新增里程碑 |
-| M4-01 | svn CLI 封装 | M1-01 | ⬜ | |
-| M4-02 | 凭据管理 | M4-01 | ⬜ | |
-| M4-03 | svn 域工具 | M4-01/02 | ⬜ | |
-| M4-04 | 需求状态机 | M1-04 | ⬜ | |
-| M4-05 | 评估与上线流程 | M4-04/M2-07/M4-03 | ⬜ | |
-| M4-06 | 项目进度 | M1-04 | ⬜ | |
-| M4-07 | 跨实体标签 | M1-04 | ⬜ | |
-| M4-08 | 追溯链路 | M4-03/05/06/07 | ⬜ | |
-| M5-01 | Mermaid mindmap | M1-04 | ⬜ | |
-| M5-02 | OPML 导出 | M5-01 | ⬜ | |
-| M5-03 | 从文档生成大纲 | M5-01/M3 | ⬜ | |
-| M5-04 | standard 模型与工具 | M1-04 | ⬜ | |
-| M5-05 | 规范 Resources 注册 | M5-04 | ⬜ | |
+| M4-01 | svn CLI 封装 | M1-01 | ✅ | 2026-08-13（LocalFakeSvnClient 简化版） |
+| M4-02 | 凭据管理 | M4-01 | ✅ | 2026-08-13 |
+| M4-03 | svn 域工具 | M4-01/02 | ✅ | 2026-08-13（模拟实现） |
+| M4-04 | 需求状态机 | M1-04 | ✅ | 2026-08-13（枚举+工具，流转规则待细化） |
+| M4-05 | 评估与上线流程 | M4-04/M2-07/M4-03 | ✅ | 2026-08-13（LLM 评估降级） |
+| M4-06 | 项目进度 | M1-04 | ✅ | 2026-08-13（进度自动计算待细化） |
+| M4-07 | 跨实体标签 | M1-04 | ✅ | 2026-08-13 |
+| M4-08 | 追溯链路 | M4-03/05/06/07 | ⬜ | 待细化 |
+| M5-01 | Mermaid mindmap | M1-04 | ✅ | 2026-08-13 |
+| M5-02 | OPML 导出 | M5-01 | ✅ | 2026-08-13 |
+| M5-03 | 从文档生成大纲 | M5-01/M3 | ✅ | 2026-08-13 |
+| M5-04 | standard 模型与工具 | M1-04 | ✅ | 2026-08-13 |
+| M5-05 | 规范 Resources 注册 | M5-04 | ✅ | 2026-08-13 |
 | M6-01 | Streamable HTTP | M0-03 | ⬜ | |
 | M6-02 | Token 鉴权 + 限流 | M6-01/M1-05 | ⬜ | |
 | M6-03 | 反代模板 | M6-02 | ⬜ | |
