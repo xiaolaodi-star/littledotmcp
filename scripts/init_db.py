@@ -22,11 +22,16 @@ _M8_ALTERS = [
     ("requirements", "milestone_id", "ALTER TABLE requirements ADD COLUMN milestone_id VARCHAR(64)"),
 ]
 
+# M11 存量库迁移：users.role 加列（管理端多用户角色）
+_M11_ALTERS = [
+    ("users", "role", "ALTER TABLE users ADD COLUMN role VARCHAR(16)"),
+]
+
 
 def _migrate_columns(engine) -> None:
-    """对存量 SQLite 库幂等补齐 M8 新增列（列已存在则忽略）。"""
+    """对存量 SQLite 库幂等补齐 M8/M11 新增列（列已存在则忽略）。"""
     with engine.begin() as conn:
-        for _table, _column, stmt in _M8_ALTERS:
+        for _table, _column, stmt in _M8_ALTERS + _M11_ALTERS:
             try:
                 conn.execute(text(stmt))
             except OperationalError as exc:

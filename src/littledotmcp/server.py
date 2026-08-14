@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse, Response
 from .auth_middleware import AuthMiddleware, RateLimitMiddleware
 from .common.logging import get_logger
 from .config import get_settings
+from .console.middleware import ConsoleAuthMiddleware
 from .db import models  # noqa: F401 确保模型注册
 from .db.engine import engine
 from .db.models import Base
@@ -90,6 +91,7 @@ def register_tools() -> None:
     """
     from .domains import hello  # noqa: F401  (占位连通测试)
     from .domains.admin import tools as admin_tools  # noqa: F401  (注册 admin_* 运维工具，M10)
+    from .console import routes as console_routes  # noqa: F401  (注册 /admin/ 与 /admin/api/* 路由，M11)
     from .domains.doc import (
         tools as doc_tools,  # noqa: F401  (注册 doc_save/read/search/list/delete)
     )
@@ -120,18 +122,43 @@ def build_http_app():
     """构建 streamable-http Starlette 应用并包装鉴权/限流/CORS 中间件。
 
     注意：add_middleware 后加的在外层，故先加 RateLimit（内）再加 Auth（外），
-    保证请求先过鉴权再过限流。
+    保证请求先过鉴权再过限流。ConsoleAuth 置于最内层，仅处理 /admin/* 段，
+    与 /mcp 的 Bearer 双轨鉴权互不干扰。
     """
+    # 必须在 streamable_http_app() 之前导入，确保 @mcp.custom_route 已注册到 _custom_starlette_routes
+    from .console import routes as _console_routes  # noqa: F401
+    from .console.errors import install_error_collector
+    from .console.middleware import ConsoleAuthMiddleware, OwnerContextMiddleware
+    from .domains import hello  # noqa: F401  (占位连通测试)
+    from .domains.admin import tools as admin_tools  # noqa: F401  (注册 admin_* 运维工具，M10)
+    # M11-03 调用异常采集：覆写 mcp.call_tool 包裹所有工具调用
+    install_error_collector(mcp)
     app = mcp.streamable_http_app()
+    # M11-05 管理端静态资源：/admin/static/* 由普通 StaticFiles 提供（正确 content-type），
+    # /admin/ 单页由 console.routes.admin_page (custom_route) 返回 index.html。
+    # mount 在 streamable_http_app 之后，确保 /admin/static/* 不被 /admin/ 路由吞掉。
+    from starlette.staticfiles import StaticFiles
+
+    app.mount("/admin/static", StaticFiles(directory=_console_routes.static_dir()), name="admin-static")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(OwnerContextMiddleware)
+    app.add_middleware(ConsoleAuthMiddleware)
     return app
 
 
 def run() -> None:
     """依据配置启动传输。"""
     init_data()
+    # 管理端引导：空库时用一次性环境变量创建首个管理员（M11-02）
+    from .console import auth as console_auth
+
+    if console_auth.is_empty_db():
+        try:
+            console_auth.bootstrap_admin()
+        except Exception:
+            logger.exception("ADMIN_BOOTSTRAP 初始化异常（已忽略，可经 /admin/api/setup 创建）")
     transport = settings.mcp_transport
     if transport == "http":
         settings.require_http_auth()
@@ -142,6 +169,12 @@ def run() -> None:
             settings.http_host,
             settings.http_port,
         )
+        if settings.http_host in ("0.0.0.0", ""):
+            logger.warning(
+                "⚠ 安全告警：HTTP 绑定在 %s（全网卡/任意地址）。管理端与 MCP 均为明文无证书，"
+                "仅限本地或可信内网使用；公网暴露须前置反向代理启用 TLS，否则存在窃听与会话劫持风险。",
+                settings.http_host,
+            )
         app = build_http_app()
         uvicorn.run(
             app,

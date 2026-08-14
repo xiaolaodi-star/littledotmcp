@@ -155,6 +155,41 @@ curl -s https://mcp.example.com/metrics
 
 > 管理权限复用 M6 共享 Token 的 local owner 语义：MCP 工具无法读取 HTTP 头，故以 `_current_owner()=="local"` 作为管理员判定，零新增鉴权模型。多用户 http 场景的细粒度管理员区分将在 M9 OAuth 落地后自然生效（L-015）。
 
+## 管理端 Web Console（M11）
+
+服务端（http 模式）启动后，浏览器访问 **`http://127.0.0.1:8890/admin/`** 即可进入管理端单页（登录 / 初始化、Dashboard、知识库、用户、异常、运维、个人中心六屏，离线静态页无构建/无 CDN）。
+
+### 初始化首个管理员
+
+空库（`users` 表为空）时二选一：
+
+```bash
+# 方式一：启动期一次性环境变量（推荐自动化部署）
+export ADMIN_BOOTSTRAP_USER=admin
+export ADMIN_BOOTSTRAP_PASSWORD="强密码"
+uv run littledotmcp
+
+# 方式二：浏览器打开 http://127.0.0.1:8890/admin/ 走 /admin/api/setup 表单创建
+```
+
+初始化成功后每次访问都会经 argon2 密码校验 + Session（Cookie `HttpOnly` + `SameSite=Strict`，默认 12h 过期，`ADMIN_SESSION_HOURS` 可调）。
+
+### 角色与能力
+
+| 角色 | 权限 |
+|------|------|
+| `admin` | 全部管理能力：用户增删改/启停、系统重置、全部异常与审计查看 |
+| `user` | 受限视图：仅本人数据（异常等按 owner 强制隔离） |
+
+管理端登录态独立于 MCP 用户 Token（存 `user_sessions` 表，绝不重签 `users.token`，互不干扰，见 L-020）；关键操作（用户变更、系统重置）写 `audit_logs` 审计（L-018）。管理端仅承载运维/管理，业务数据操作仍走 MCP 工具。
+
+### 安全边界（与 L-019 一致）
+
+- 管理端仅支持 HTTP 无证书访问，默认建议绑定 `127.0.0.1`，**仅限本地/可信内网使用**；
+- 公网暴露**必须**经 `deploy/nginx.conf` / `deploy/caddy.Caddyfile` 前置 TLS 反代（`/admin` 前缀已全量反代到 127.0.0.1:8890），禁止直暴露 8890 明文端口；
+- 绑定 `0.0.0.0` 启动时会输出安全告警日志；
+- 会话默认 12h 过期，Cookie 防脚本读取（HttpOnly）且同站限制（SameSite=Strict）。
+
 ## 需求追溯链路（M8）
 
 `requirement_trace(code)` 一键聚合需求端到端追溯信息：SVN 提交（经 `requirement_id`）、关联文档、标签（`related_tag` + `EntityTag`）、所属项目/里程碑（扩展 B）、状态流转时间线。强制 owner 隔离，A/B 用户互不可见。

@@ -8,7 +8,7 @@ littledotmcp 项目任务计划（WBS）
 # littledotmcp 项目任务计划（WBS）
 
 > 项目：个人 MCP 开发工具箱 ｜ 语言：Python 3.12 ｜ 框架：官方 mcp SDK（FastMCP）
-> 维护者：朱世航 ｜ 最后更新：2026-08-14
+> 维护者：朱世航 ｜ 最后更新：2026-08-14（M11 规划已纳入）
 > 关联文档：[架构设计](architecture.md) ｜ [已知限制](limitations.md) ｜ [README](../README.md)
 
 ---
@@ -488,6 +488,107 @@ littledotmcp 项目任务计划（WBS）
 - 复用既有能力：指标计数源自 M7 `EmbeddingCache`；重置复用 `scripts/reset_data.py`；权限复用 M6 共享 Token，不新增鉴权模型。
 - owner 隔离在所有 `admin_stats` 查询中强制生效，不泄露他人数据。
 
+### M11 管理端（Web Console，依赖：M6/M10，状态：⬜ 规划就绪，待实施）
+
+> 目标：在现有 FastMCP streamable-http **单进程内**新增一个轻量管理端（方案 A：同进程内嵌 Web，零新进程、零新 Web 框架），通过浏览器以 HTTP（无证书，本地/可信内网）方式访问，提供个人 MCP 运维所需的通用管理能力。形态选型已与用户确认：不引入 FastAPI/前端框架，复用 Starlette `custom_route` 挂载。
+
+**形态选型对比（已决策）**
+
+| 维度 | A. 同进程内嵌 Web（✅ 选定） | B. 独立 Web 服务 + 反代 | C. 仅管理 API 无 UI |
+|------|------|------|------|
+| 启动方式 | 单命令 `uv run littledotmcp`，零新进程 | 两进程（MCP + FastAPI）+ Caddy 编排 | 同 A |
+| 依赖 | 零新增（复用 `custom_route`） | 需引入 FastAPI + 前端框架 | 零新增 |
+| 数据一致性 | 共享 DB engine/session，天然一致 | 两进程并发访问同一 SQLite，写锁竞争风险 | 同 A |
+| 上下文贯通 | `scope["owner_id"]` 已注入，直接拿调用方身份 | 需跨进程传递身份（Token 重放） | 同 A |
+| 运维稳定性 | 管理端异常用独立 APIRouter + 异常兜底缓解 | 进程隔离，管理端崩溃不影响 MCP | 同 A |
+| 部署复杂度 | 最低，本地开箱即用 | 需反代配置、端口规划 | 低 |
+
+**选型结论**：本地启动 + 浏览器访问 + 个人运维场景下，单进程方案启动最简、owner 上下文贯通、改动面最小（完全复用 `custom_route` 模式）；B 的进程隔离与扩展优势属过度设计，反而引入 SQLite 跨进程写锁与双端鉴权复杂度。A 后续如需拆 B，管理 API 部分可直接搬走。
+
+**新增目录结构**
+
+```
+src/littledotmcp/
+├── server.py                      # [MODIFY] build_http_app 注册 ConsoleAuth 中间件；register_tools 注册 console 路由
+├── auth_middleware.py             # [MODIFY] _PUBLIC_PATHS 增加 /admin/、/admin/api/login、/admin/api/setup
+├── db/models.py                   # [MODIFY] User 增加 role 列；新增 UserSession/CallError/AuditLog 模型
+├── console/                      # [NEW] 管理端包
+│   ├── __init__.py
+│   ├── auth.py                    # [NEW] session 签发/校验、空库初始化管理员、ADMIN_BOOTSTRAP 环境变量兜底
+│   ├── deps.py                    # [NEW] require_role/require_owner 依赖、当前用户注入
+│   ├── routes.py                  # [NEW] 管理 API + 页面路由（custom_route 挂载 /admin/ 与 /admin/api/*）
+│   ├── errors.py                  # [NEW] @mcp.middleware 全局异常采集（脱敏+限频合并+落库）
+│   └── static/                    # [NEW] index.html / app.js / style.css（离线静态单页）
+├── scripts/
+│   └── init_db.py                 # [MODIFY] 末尾追加幂等迁移（users.role 加列）
+tests/
+└── console/                      # [NEW] 模型迁移、会话鉴权、异常采集、API 隔离、页面可达测试
+docs/
+├── architecture.md                # [MODIFY] 补充管理端架构（ADR）
+└── limitations.md                 # [MODIFY] 登记 M11 限制（无证书绑定、会话表与 Token 分离）
+```
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| M11-01 | 数据模型与迁移：User.role + user_sessions/call_errors/audit_logs 三表 + 幂等迁移 | ✅ 2026-08-14 |
+| M11-02 | 管理端认证骨架：ConsoleAuth 会话中间件、登录/登出/初始化管理员、路由挂载 | ✅ 2026-08-14 |
+| M11-03 | 调用异常采集：MCP 工具调用 middleware（脱敏 + 限频合并 + 落库） | ✅ 2026-08-14 |
+| M11-04 | 管理 API：知识库/用户/异常/运维端点（复用业务层、owner 隔离与角色） | ✅ 2026-08-14 |
+| M11-05 | 管理端页面：静态单页（Dashboard/知识库/用户/异常/运维/个人中心） | ✅ 2026-08-14 |
+| M11-06 | 安全加固与文档回写：HTTP 绑定告警、审计、架构/限制/PLAN 更新 | ✅ 2026-08-14 |
+
+**M11-01 数据模型与迁移**
+- 说明：`db/models.py` 的 `User` 增加 `role: Mapped[str] = mapped_column(String(16), default="user")`（`admin`/`user`）；新增三张表：
+  - `user_sessions`（`id / user_id(FK) / token(unique) / expires_at / ip / created_at`）：管理端登录态**独立**于此，绝不触碰 `users.token`（现状 `auth.login` 每次登录重签 `users.token` 会顶掉 MCP 用户 Token，属隐患，管理端必须绕开）；
+  - `call_errors`（`id / owner_id / tool_name / args_summary(截断2000) / error_type / error_msg / trace_head / status(open/closed) / occurrences / created_at`）：调用异常管理数据底座；
+  - `audit_logs`（`id / actor_id / action / entity / entity_id / detail / created_at`）：管理端操作留痕（增删用户、重置、改角色等），与 `svn_ops_log` 并存。
+  - `scripts/init_db.py` 末尾追加 `_M11_ALTERS` 幂等迁移（`users.role` 加列，捕获 "duplicate column" 忽略），新表由 `Base.metadata.create_all` 自动建；沿用 M8 的 `_ALTERS` 模式。
+- 验收标准：存量库升级无副作用；新库建表完整；模型单测通过；CI 不破坏现有 193 测试。
+- 依赖：M1-02（模型基类）/ M1-03（迁移模式）；规模：M；关键文件：`db/models.py`、`scripts/init_db.py`。
+
+**M11-02 管理端认证骨架**
+- 说明：`console/auth.py` 实现 session 签发/校验（token 表独立，复用 `auth.py` argon2 校验），空库 `users` 为空时 `GET /admin/setup` 开放"创建首个管理员"表单（仅空库可用，杜绝默认口令），或用一次性环境变量 `ADMIN_BOOTSTRAP_USER/PASSWORD` 兜底；`console/routes.py` 用 `@mcp.custom_route` 挂 `/admin/`（静态页）与 `/admin/api/login`、`/admin/api/logout`、`/admin/api/me`、`/admin/api/setup`；新增 `ConsoleAuth` 中间件解析 Cookie → 注入 `scope["console_user"] = {user_id, username, role}`，过期/无效 → 302 登录页 / 401。
+- 关键决策：
+  - **与现有鉴权双轨并存**：`/mcp` 维持 Bearer 双通道（共享 Token→local、用户 Token→user.id）**完全不变**；`AuthMiddleware._PUBLIC_PATHS` 增加 `/admin/`、`/admin/api/login`、`/admin/api/setup`，其内部鉴权交给 `ConsoleAuth`，两套体系互不干扰。
+  - **无证书 HTTP 安全**：默认 `http_host` 文档建议 `127.0.0.1`；`0.0.0.0` 启动日志显式告警；Session Cookie `HttpOnly; SameSite=Strict; Path=/`（HTTP 下不设 Secure，属正常）；Session 默认 12h 过期；复用现有按 IP 限流；管理 API 校验 `Origin` 头防 CSRF。
+- 验收标准：`/admin/` 未登录 302 登录页；错误口令 401；登录后 Cookie 生效；过期会话 401；空库初始化路由仅空库可用；越权（user 调 admin 接口）被拒；测试覆盖 401/过期/越权。
+- 依赖：M11-01；规模：M；关键文件：`console/auth.py`、`console/routes.py`、`console/deps.py`、`auth_middleware.py`、`server.py`。
+
+**M11-03 调用异常采集**
+- 说明：`console/errors.py` 注册 `@mcp.middleware()`（mcp>=1.9 支持；实现时先验证 API，若版本不支持则退化为对各域工具加统一装饰器），包裹所有 MCP 工具调用，取工具名、参数摘要（截断 + 密钥脱敏）、异常类型/消息/堆栈头；落 `call_errors`（`owner` 取 `scope["owner_id"]`），异常照常抛给客户端不改变工具契约；**限频防刷库**：同工具同错误类型 5 分钟内合并计数（`occurrences` 字段），管理端可筛选/标记 closed/删除。
+- 验收标准：工具抛异常后 `call_errors` 有记录；参数脱敏（无密码/密钥明文）；同错误 5 分钟内合并；客户端仍收到原始异常；异步落库不阻塞工具返回（或等量同步但轻量）。
+- 依赖：M11-01；规模：M；关键文件：`console/errors.py`、`server.py`（注册 middleware）。
+
+**M11-04 管理 API**
+- 说明：`console/routes.py` 实现 JSON 端点，复用业务层而非走 MCP 通道：
+  - 知识库：`GET/DELETE /admin/api/documents`、`GET/DELETE /admin/api/kb`（admin 跨 owner，user 仅自己，owner 过滤强制）。
+  - 用户：`GET/POST/PATCH/DELETE /admin/api/users`、`PATCH .../users/{id}/role|active|password`（admin 专属）。
+  - 异常：`GET /admin/api/errors?status=&tool=&owner=`、`PATCH .../{id}/close`、`DELETE .../{id}`（admin 全部 / user 自己）。
+  - 运维：`GET /admin/api/system/config`、`GET /admin/api/system/tools`、`POST /admin/api/system/reset`（admin 专属）。
+  - 个人：`PATCH /admin/api/me/password`（登录即可）。
+  - 复用点：用户/密码校验复用 `auth.py`；数据量统计复用 `admin_stats` 逻辑；配置诊断复用 `admin_config_check`；重置复用 `admin_reset`/`reset_data`；文档/知识库 CRUD 直接调 `domains/doc/tools.py`、`domains/kb/tools.py` 业务函数。
+- 验收标准：各端点正确返回；admin 跨 owner 可见、user 仅见本人；越权返回 403；删除/重置二次确认（前端）；API 鉴权测试覆盖 owner 隔离与角色。
+- 依赖：M11-02、M11-03；规模：L；关键文件：`console/routes.py`、`console/deps.py`。
+
+**M11-05 管理端页面**
+- 说明：`console/static/` 提供离线可用静态单页（`index.html` + `app.js` + `style.css`，无 CDN、原生 JS + fetch），含六屏：① 登录/初始化管理员页（空库显示初始化表单）；② Dashboard 概览（健康/版本/启动时长/各域数据量卡片/近期异常数）；③ 知识库管理（documents 与 kb_documents 两列表，admin 跨 owner 筛选，user 仅本人）；④ 用户管理（admin：新建/改角色/启停/重置密码）；⑤ 调用异常（列表 + 详情抽屉：脱敏参数与堆栈头，可标记已处理/删除）；⑥ 系统运维/个人中心（配置诊断、工具清单、一键重置二次确认；个人改密码）。设计风格：深色侧边栏 + 浅色内容区控制台风，按角色显隐导航，桌面优先窄屏折叠，列表强制分页（防 SQLite 写锁竞争）。
+- 验收标准：页面可达（未登录跳登录）；各页数据正确渲染；危险操作二次确认；离线（无外网）可加载；响应式基本可用。
+- 依赖：M11-04；规模：L；关键文件：`console/static/*`、`console/routes.py`（静态路由）。
+
+**M11-06 安全加固与文档回写**
+- 说明：HTTP 绑定告警（0.0.0.0 显式告警、建议 127.0.0.1）、审计完善（`audit_logs` 覆盖增删用户/重置/改角色）、`docs/architecture.md` 补充管理端架构 ADR、`docs/limitations.md` 登记 M11 限制（无证书仅限本地/可信内网、会话表与 MCP Token 分离、SQLite 并发写）、本 PLAN.md M11 状态回写为完成。
+- 验收标准：文档与代码一致无漂移；限制清单覆盖已知边界；告警日志存在。
+- 依赖：M11-05；规模：S；关键文件：`docs/architecture.md`、`docs/limitations.md`、各 console 模块。
+
+**边界与防回归**
+- 数据迁移沿用 M8 `_ALTERS` 幂等模式（存量库 ALTER 加 `users.role`，捕获 "duplicate column" 忽略）；新表由 `create_all` 自动建。
+- owner 隔离在所有管理查询中强制生效：admin 跨 owner 视图用显式查询，user 视图强制 `owner_id = 当前用户`，禁止调用方越权。
+- 会话与 MCP Token 分离：`user_sessions` 独立，绝不调用会重签 `users.token` 的 `auth.login`，避免顶掉 MCP 用户 Token。
+- 无证书 HTTP 安全：默认 `http_host` 文档建议 `127.0.0.1`，`0.0.0.0` 启动告警；管理 API 校验 `Origin` 头防 CSRF；Session 默认 12h 过期；复用现有按 IP 限流。
+- 性能：管理端列表强制分页（避免大事务与 SQLite 写锁竞争），异常采集异步/轻量落库不阻塞工具返回；日志脱敏，禁打印密码/密钥。
+- 兼容性：新增模块不改动 `domains/*` 工具契约，现有 193 测试不受影响；每个里程碑自带测试（模型、鉴权、异常采集、API 隔离、页面可达）。
+- 风险与对策：FastMCP `@mcp.middleware()` API 随版本变化 → 实现时验证 mcp>=1.9，备选统一工具装饰器方案；SQLite 跨进程写（管理端 + MCP）→ WAL 已开，列表强制分页，个人规模冲突概率低。
+
 ---
 
 ## 4. 横切任务（贯穿各里程碑）
@@ -519,6 +620,9 @@ M9: M9-01（企微客户端骨架）→ M9-02（doc provider 切换）
     M9 依赖：M3-02（DocStorage 抽象）+ M3-04（doc 工具）
 M10: M10-01（指标+诊断）→ M10-02（工具清单+统计）；M10-03（重置+权限，依赖 02）
     M10 依赖：M6-01/02（路由+鉴权）/ M7-02（缓存计数）/ M3-05（reset_data）
+M11: M11-01（模型+迁移）→ M11-02（认证骨架）/ M11-03（异常采集）；M11-04（API，依赖 02+03）；M11-05（页面，依赖 04）；M11-06（文档回写，依赖 05）
+    M11 依赖：M6-01/02（custom_route+鉴权基线）/ M10-02（admin_stats 复用）/ M10-03（reset_data 复用）/ M1-03（迁移模式）
+    M11 形态：方案 A 同进程内嵌 Web（复用 custom_route，不引入 FastAPI/前端框架）
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
     M4-08（依赖 03/05/06/07，落地于 M8）
 M5: M5-01 → M5-02 → M5-03；M5-04 → M5-05
@@ -595,6 +699,12 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M10-01 | 指标端点 + 配置诊断 | M6-01/M7 | ✅ | 2026-08-14 |
 | M10-02 | 工具清单 + 数据量统计 | M1-04 | ✅ | 2026-08-14 |
 | M10-03 | 重置工具 + 管理权限 | M6-02/M3-05 | ✅ | 2026-08-14 |
+| M11-01 | 管理端数据模型与迁移 | M1-02/M1-03 | ✅ | 2026-08-14 |
+| M11-02 | 管理端认证骨架 | M11-01 | ✅ | 2026-08-14 |
+| M11-03 | 调用异常采集 | M11-01 | ✅ | 2026-08-14 |
+| M11-04 | 管理 API（知识库/用户/异常/运维） | M11-02/M11-03 | ✅ | 2026-08-14 |
+| M11-05 | 管理端静态页面 | M11-04 | ✅ | 2026-08-14 |
+| M11-06 | 安全加固与文档回写 | M11-05 | ✅ | 2026-08-14 |
 
 ---
 
@@ -624,3 +734,4 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 - **M8**：requirement_trace 端到端可查；svn_commit 关联需求落库；文档/标签聚合完整；隔离测试绿。
 - **M9**：企微客户端骨架 mock 跑通；doc provider 切换不破坏 LOCAL 主链。
 - **M10**：`/metrics` 可抓、配置诊断准确；工具清单/数据量统计正确且隔离；`admin_reset` 等价 CLI 且普通 owner 越权被拒（local owner 语义）。
+- **M11**：管理端同进程内嵌可访问；多用户(admin/user)角色 + Session Cookie 鉴权（独立于 MCP Token）；调用异常可采集/筛选/标记；知识库/用户/异常/运维 API owner 隔离且越权被拒；静态页面六屏可达且离线可用；现有 193 测试不受影响。

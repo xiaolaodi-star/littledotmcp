@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>littledotmcp 管理端</title>
+  <link rel="stylesheet" href="/admin/static/style.css" />
+</head>
+<body>
+  <!-- 登录/初始化 -->
+  <div id="loginScreen" class="login-screen hidden">
+    <div class="login-card">
+      <div class="logo">L</div>
+      <h2 id="loginTitle">管理端登录</h2>
+      <p class="sub" id="loginSub">使用管理员或用户账号登录</p>
+      <div class="field">
+        <label>用户名</label>
+        <input id="loginUser" class="input" autocomplete="username" placeholder="username" />
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input id="loginPass" class="input" type="password" autocomplete="current-password" placeholder="password" />
+      </div>
+      <button id="loginBtn" class="btn btn-primary">登录</button>
+    </div>
+  </div>
+
+  <!-- 主框架 -->
+  <aside id="sidebar" class="sidebar">
+    <div class="brand"><span class="logo">L</span> littledotmcp</div>
+    <nav id="nav">
+      <div class="nav-item active" data-view="dashboard"><span class="ic">▣</span> 概览</div>
+      <div class="nav-item" data-view="docs"><span class="ic">📄</span> 知识库</div>
+      <div class="nav-item hidden-role" data-role="admin" data-view="users"><span class="ic">👤</span> 用户管理</div>
+      <div class="nav-item" data-view="errors"><span class="ic">⚠</span> 调用异常</div>
+      <div class="nav-item hidden-role" data-role="admin" data-view="ops"><span class="ic">⚙</span> 系统运维</div>
+      <div class="nav-item" data-view="me"><span class="ic">🔑</span> 个人中心</div>
+    </nav>
+    <div class="foot">v-local · 内嵌管理端</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menuToggle">☰</button>
+        <span class="page-title" id="pageTitle">概览</span>
+      </div>
+      <div class="user-box">
+        <div class="user-chip">
+          <div class="avatar" id="avatar">?</div>
+          <span id="userName">—</span>
+          <span class="role-tag" id="roleTag">—</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn">退出</button>
+      </div>
+    </header>
+
+    <main class="content" id="content"><!-- 视图渲染区 --></main>
+  </div>
+
+  <div class="toast-wrap" id="toastWrap"></div>
+  <div id="overlay"></div>
+
+  <script src="/admin/static/app.js"></script>
+</body>
+</html>

@@ -33,6 +33,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(128), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    role: Mapped[str] = mapped_column(String(16), default="user")  # "admin" / "user"（M11 管理端）
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.now(dt.timezone.utc))
     token: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
 
@@ -205,3 +206,58 @@ class Standard(Base):
     category: Mapped[str] = mapped_column(String(64), default="general")
     content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.now(dt.timezone.utc))
+
+
+# ===== M11 管理端新增模型 =====
+
+
+class UserSession(Base):
+    """管理端登录态（独立于 users.token，避免顶掉 MCP 用户 Bearer Token）。"""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.now(dt.timezone.utc)
+    )
+
+
+class CallError(Base):
+    """MCP 工具调用异常记录（管理端异常采集数据底座）。"""
+
+    __tablename__ = "call_errors"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(64), index=True)
+    tool_name: Mapped[str] = mapped_column(String(128), index=True)
+    args_summary: Mapped[str] = mapped_column(Text, default="")  # 脱敏后的参数摘要
+    error_type: Mapped[str] = mapped_column(String(128), default="")
+    error_msg: Mapped[str] = mapped_column(Text, default="")
+    trace_head: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="open")  # open/closed
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.now(dt.timezone.utc)
+    )
+
+
+class AuditLog(Base):
+    """管理端操作留痕（与 svn_ops_log 并存）。"""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(64), index=True)
+    action: Mapped[str] = mapped_column(String(64))
+    entity: Mapped[str] = mapped_column(String(64), default="")
+    entity_id: Mapped[str] = mapped_column(String(64), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, default=dt.datetime.now(dt.timezone.utc)
+    )

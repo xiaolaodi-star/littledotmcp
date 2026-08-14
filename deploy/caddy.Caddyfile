@@ -20,4 +20,8 @@ mcp.example.com {           # TODO: 改为真实域名
             write_timeout 3600s
         }
     }
+
+    # 管理端 Web Console（M11）：/admin 及其子路径（/admin/、/admin/static/**、/admin/api/**）
+    # 已随上面根级 reverse_proxy 按前缀全量反代，无需额外配置；Caddy 自动注入
+    # X-Forwarded-Proto，后端 ConsoleAuthMiddleware 的 Origin 校验可正常识别 HTTPS。
 }

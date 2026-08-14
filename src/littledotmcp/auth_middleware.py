@@ -33,8 +33,8 @@ _DEFAULT_PER_SECONDS: int = 60
 # 快路径共享密钥通过时的默认 owner（与业务层 _DEFAULT_OWNER 一致）
 _LOCAL_OWNER: str = "local"
 
-# 免鉴权路径（仅无敏感信息的健康检查，供反代/负载均衡探测）
-_PUBLIC_PATHS: frozenset[str] = frozenset({"/health"})
+# 免鉴权路径前缀（无敏感信息的健康检查 + 管理端整段交由 ConsoleAuth 处理）
+_PUBLIC_PATH_PREFIXES: tuple[str, ...] = ("/health", "/admin", "/admin/api/login", "/admin/api/setup")
 
 
 def _client_ip(request: Request) -> str:
@@ -43,8 +43,8 @@ def _client_ip(request: Request) -> str:
 
 
 def _is_public_path(path: str) -> bool:
-    """是否免鉴权路径（健康检查）。"""
-    return path in _PUBLIC_PATHS
+    """是否免鉴权路径（健康检查 / 管理端整段放行给 ConsoleAuth）。"""
+    return any(path == p or path.startswith(p + "/") or path == p for p in _PUBLIC_PATH_PREFIXES)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

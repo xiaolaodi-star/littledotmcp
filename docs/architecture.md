@@ -6,7 +6,7 @@
 
 # littledotmcp 架构设计（知识库）
 
-> 维护者：朱世航 ｜ 最后更新：2026-08-14 ｜ 状态：M0 起逐里程碑落地
+> 维护者：朱世航 ｜ 最后更新：2026-08-14 ｜ 状态：M0 起逐里程碑落地（M11 管理端已完成，ADR-16 落地）
 
 ## 1. 定位
 
@@ -122,5 +122,19 @@
   `scripts/reset_data.reset_data()`）；管理权限复用 M6 共享 Token 的 local owner
   语义（`_current_owner() == "local"` 即管理员），MCP 工具无法读 HTTP 头，故零
   新增鉴权模型，普通 owner 调 `admin_*` 返回"需要管理员权限"，避免远程越权运维。
+- **ADR-16 管理端（Web Console，M11，✅ 已完成）**：在 FastMCP
+  streamable-http **单进程内**以 Starlette `custom_route` 挂载轻量管理端（方案 A：同进程
+  内嵌 Web，零新进程、零新 Web 框架），详设见 [PLAN.md](PLAN.md) §3 M11。关键决策：
+  (1) 形态选 A：复用 `/health`、`/metrics` 既有 custom_route 模式，改动面最小，owner 上下文
+  贯通，后续拆独立进程时管理 API 可直接搬走；(2) 会话与 MCP Token 分离：新增 `user_sessions`
+  表独立存储管理端登录态（HttpOnly + SameSite=Strict Cookie），**绝不调用会重签 `users.token`
+  的 `auth.login`**，避免顶掉 MCP 用户 Token；(3) 鉴权双轨并存：`/mcp` 维持 Bearer 双通道不变，
+  `AuthMiddleware._PUBLIC_PATHS` 放行 `/admin/*`，内部鉴权交给 `ConsoleAuth`（Cookie Session）；
+  (4) 多用户 + 角色：`users.role`（`admin`/`user`），路由级依赖 `require_role`/`require_owner`
+  实现 owner 隔离（admin 跨 owner 视图、user 仅本人）；(5) 异常采集：优先 `@mcp.middleware()`
+  包裹工具调用落 `call_errors`（脱敏 + 5 分钟限频合并），异常照常抛不改变工具契约；(6) 无证书 HTTP
+  安全：默认建议 `127.0.0.1`，`0.0.0.0` 启动告警，Session 默认 12h 过期，复用按 IP 限流 +
+  校验 `Origin` 防 CSRF；(7) 复用原则：用户校验/统计/诊断/重置复用 M1-05/M10 业务层，文档与知识库
+  CRUD 直接调 `domains/*` 业务函数（不走 MCP 通道）。管理端页面为离线静态单页（`console/static/`）。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。
