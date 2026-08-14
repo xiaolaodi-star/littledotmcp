@@ -1,0 +1,23 @@
+# littledotmcp 服务端反代模板（M6-03，Caddy 版）
+# 用途：自动 HTTPS（Caddy 自动申请 Let's Encrypt）→ 127.0.0.1:8890/mcp
+#
+# 使用：
+#   1. 将域名改为真实域名（mcp.example.com）
+#   2. caddy run --config deploy/caddy.Caddyfile
+#   3. 首次访问会自动签发证书
+
+mcp.example.com {           # TODO: 改为真实域名
+    # 流式响应（SSE/streamable-http）关闭缓冲
+    header {
+        -Server
+        Cache-Control "no-store"
+    }
+
+    reverse_proxy 127.0.0.1:8890 {
+        # streamable-http 长连接
+        transport http {
+            read_timeout 3600s
+            write_timeout 3600s
+        }
+    }
+}

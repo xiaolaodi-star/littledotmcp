@@ -8,7 +8,7 @@ littledotmcp 项目任务计划（WBS）
 # littledotmcp 项目任务计划（WBS）
 
 > 项目：个人 MCP 开发工具箱 ｜ 语言：Python 3.12 ｜ 框架：官方 mcp SDK（FastMCP）
-> 维护者：朱世航 ｜ 最后更新：2026-08-13
+> 维护者：朱世航 ｜ 最后更新：2026-08-14
 > 关联文档：[架构设计](architecture.md) ｜ [已知限制](limitations.md) ｜ [README](../README.md)
 
 ---
@@ -361,13 +361,13 @@ littledotmcp 项目任务计划（WBS）
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M6-01 | Streamable HTTP 传输：uvicorn/Starlette 起 /mcp | ⬜ |
-| M6-02 | Token 鉴权 + 限流：Bearer 校验、速率限制、审计 | ⬜ |
-| M6-03 | Nginx/Caddy 反代模板：HTTPS 443 → /mcp | ⬜ |
-| M6-04 | uv 打包交付：可执行/源码包（数据目录持久化，可选 Ollama） | ⬜ |
-| M6-05 | 空知识库初始化：首次启动建库、无用户数据 | ⬜ |
-| M6-06 | 使用文档与许可：README 部署/配置/知识重置、LICENSE | ⬜ |
-| M6-07 | 端到端验收：stdio / 远程 / 打包三形态 | ⬜ |
+| M6-01 | Streamable HTTP 传输：uvicorn/Starlette 起 /mcp | ✅ |
+| M6-02 | Token 鉴权 + 限流：Bearer 校验、速率限制、审计 | ✅ |
+| M6-03 | Nginx/Caddy 反代模板：HTTPS 443 → /mcp | ✅ |
+| M6-04 | uv 打包交付：可执行/源码包（数据目录持久化，可选 Ollama） | ✅ |
+| M6-05 | 空知识库初始化：首次启动建库、无用户数据 | ✅ |
+| M6-06 | 使用文档与许可：README 部署/配置/知识重置、LICENSE | ✅ |
+| M6-07 | 端到端验收：stdio / 远程 / 打包三形态 | ✅ |
 
 **M6-01 Streamable HTTP 传输**
 - 说明：`MCP_TRANSPORT=http` 时以 uvicorn 启动 streamable-http（FastMCP 内置 Starlette 应用挂载 `/mcp`）；CORS 配置；HTTP_HOST/PORT 生效。
@@ -377,7 +377,7 @@ littledotmcp 项目任务计划（WBS）
 **M6-02 Token 鉴权 + 限流**
 - 说明：HTTP 中间件：Bearer Token 校验（与 M1-05 令牌体系一致）、简单令牌桶限流（按 IP/Token）、审计；未配置 Token 拒绝远程访问。
 - 验收标准：无 Token 拒绝；错误 Token 拒绝；超限 429；合法 Token 通过。
-- 依赖：M6-01 + M1-05；规模：M；关键文件：`http_middleware.py`。
+- 依赖：M6-01 + M1-05；规模：M；关键文件：`auth_middleware.py`。
 
 **M6-03 反代模板**
 - 说明：`deploy/nginx.conf` / `deploy/caddy.Caddyfile` 模板（443 HTTPS → 127.0.0.1:8890/mcp，WebSocket/SSE 支持）。
@@ -385,7 +385,7 @@ littledotmcp 项目任务计划（WBS）
 - 依赖：M6-02；规模：S；关键文件：`deploy/`。
 
 **M6-04 uv 打包交付**
-- 说明：`uv build` 产出 wheel + sdist 源码包；pyproject `[project.scripts]` 提供 `littledotmcp` 可执行入口（可选 uvx 运行）；`data/` 数据目录随首次启动初始化；chromadb 等原生依赖经 uv 本地安装规避平台问题。
+- 说明：`uv build` 产出 wheel + sdist 源码包；pyproject `[project.scripts]` 提供 `littledotmcp` 可执行入口（可选 uvx 运行）；`data/` 数据目录随首次启动初始化；原生依赖（sqlite-vec 等）经 uv 锁定版本规避平台问题。
 - 验收标准：干净环境 `uv sync` + `uv run littledotmcp` 可启动；数据持久化于 `data/`；依赖经 uv.lock 锁定。
 - 依赖：M1/M2/M3 依赖就绪；规模：M；关键文件：`pyproject.toml`、`scripts/`。
 
@@ -489,13 +489,13 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M5-03 | 从文档生成大纲 | M5-01/M3 | ✅ | 2026-08-13 |
 | M5-04 | standard 模型与工具 | M1-04 | ✅ | 2026-08-13 |
 | M5-05 | 规范 Resources 注册 | M5-04 | ✅ | 2026-08-13 |
-| M6-01 | Streamable HTTP | M0-03 | ⬜ | |
-| M6-02 | Token 鉴权 + 限流 | M6-01/M1-05 | ⬜ | |
-| M6-03 | 反代模板 | M6-02 | ⬜ | |
-| M6-04 | uv 打包交付 | M1/M2/M3 | ⬜ | |
-| M6-05 | 空知识库初始化 | M6-04/M1-03 | ⬜ | |
-| M6-06 | 使用文档与许可 | M6-05 | ⬜ | |
-| M6-07 | 端到端验收 | M6-01~06 | ⬜ | |
+| M6-01 | Streamable HTTP | M0-03 | ✅ | 2026-08-14 |
+| M6-02 | Token 鉴权 + 限流 | M6-01/M1-05 | ✅ | 2026-08-14 |
+| M6-03 | 反代模板 | M6-02 | ✅ | 2026-08-14 |
+| M6-04 | uv 打包交付 | M1/M2/M3 | ✅ | 2026-08-14 |
+| M6-05 | 空知识库初始化 | M6-04/M1-03 | ✅ | 2026-08-14 |
+| M6-06 | 使用文档与许可 | M6-05 | ✅ | 2026-08-14 |
+| M6-07 | 端到端验收 | M6-01~06 | ✅ | 2026-08-14 |
 
 ---
 

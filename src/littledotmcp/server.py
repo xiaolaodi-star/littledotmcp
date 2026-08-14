@@ -9,9 +9,16 @@
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
+from .auth_middleware import AuthMiddleware, RateLimitMiddleware
 from .common.logging import get_logger
 from .config import get_settings
+from .db import models  # noqa: F401 确保模型注册
+from .db.engine import engine
+from .db.models import Base
 
 logger = get_logger(__name__)
 
@@ -24,6 +31,12 @@ mcp = FastMCP(
     port=settings.http_port,
     streamable_http_path="/mcp",
 )
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """健康检查（反代可用）。"""
+    return JSONResponse({"status": "ok", "service": "littledotmcp"})
 
 
 def register_tools() -> None:
@@ -56,17 +69,45 @@ def register_tools() -> None:
     )
 
 
+def init_data() -> None:
+    """首次启动自动建库（幂等），空知识库无用户数据（M6-05）。"""
+    Base.metadata.create_all(engine)
+    logger.info("数据库已初始化/更新（幂等）：%s", engine.url)
+
+
+def build_http_app():
+    """构建 streamable-http Starlette 应用并包装鉴权/限流/CORS 中间件。
+
+    注意：add_middleware 后加的在外层，故先加 RateLimit（内）再加 Auth（外），
+    保证请求先过鉴权再过限流。
+    """
+    app = mcp.streamable_http_app()
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(AuthMiddleware)
+    return app
+
+
 def run() -> None:
     """依据配置启动传输。"""
+    init_data()
     transport = settings.mcp_transport
     if transport == "http":
         settings.require_http_auth()
+        import uvicorn
+
         logger.info(
             "启动 streamable-http 传输 host=%s port=%s",
             settings.http_host,
             settings.http_port,
         )
-        mcp.run(transport="streamable-http")
+        app = build_http_app()
+        uvicorn.run(
+            app,
+            host=settings.http_host,
+            port=settings.http_port,
+            log_level=settings.log_level.lower(),
+        )
     elif transport == "stdio":
         logger.info("启动 stdio 传输")
         mcp.run(transport="stdio")

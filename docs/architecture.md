@@ -75,5 +75,15 @@
   `scripts/seed_standards.py`（`STANDARD_TEMPLATES=1`）可选注入；
   `resources/standards.py` 注册 Resource 模板 `standard://{name}` + Prompt
   `review_by_standard`。依赖零新增（LLM SDK 留 M7）。
+- **ADR-11 远程传输与打包（M6，2026-08-14 落地）**：`MCP_TRANSPORT=http`
+  时用 `uvicorn.run(mcp.streamable_http_app())` 起 streamable-http（不再用
+  `mcp.run(transport=...)`，以便注入自定义中间件）；`auth_middleware.py`
+  提供两层 Starlette 中间件——`AuthMiddleware`（`Authorization: Bearer`，
+  先比 `mcp_auth_token` 共享密钥快路径，再走 M1-05 用户 Token，`/health`
+  免鉴权）与 `RateLimitMiddleware`（进程内令牌桶按 IP 限流，超限 429，
+  符合 ADR-4 零外部中间件）；`server.py` 新增 `init_data()` 启动幂等建库
+  与 `build_http_app()` 中间件组装（CORS + 限流 + 鉴权，后加者在外层）；
+  反代模板 `deploy/nginx.conf`/`deploy/caddy.Caddyfile`（HTTPS→8890）；
+  交付 `uv build`（wheel+sdist），`scripts/reset_data.py` 提供知识重置。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。
