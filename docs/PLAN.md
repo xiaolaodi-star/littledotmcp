@@ -217,7 +217,7 @@ littledotmcp 项目任务计划（WBS）
 | M3-07 | VectorStore 抽象 + ChromaDB 持久化（metadata 强制 owner_id） | ✅ 2026-08-13 |
 | M3-08 | RAG 检索问答：kb_ingest/search/list/delete + 向量+BM25 混合；kb_ask | ✅ 2026-08-13（kb_ask 剥离 M7） |
 | M3-09 | 用户隔离与成本控制：隔离测试 + FakeEmbedder 缓存验证 | ✅ 2026-08-13 |
-| M7 | 真实 Embedding（OpenAI 兼容/Ollama）+ kb_ask（LLM 生成）+ 成本验证 | ⬜ 新增里程碑 |
+| M7 | 真实 Embedding（OpenAI 兼容/Ollama）+ kb_ask（LLM 生成）+ 成本验证 | ✅ 2026-08-14 |
 
 **M3-01 文档解析器集合**
 - 说明：`rag/parsers.py`：按扩展名路由 txt/md（原生）、pdf（pypdf/pdfplumber）、docx（python-docx）；解析失败记录并跳过；返回文本+元信息（页数/字符数）。
@@ -265,9 +265,14 @@ littledotmcp 项目任务计划（WBS）
 - 依赖：M3-08；规模：M；关键文件：`tests/test_kb_isolation.py`。✅ 2026-08-13。
 
 **M7 真实 Embedding + kb_ask（新增里程碑，2026-08-13 用户决策剥离）**
-- 说明：`rag/embedding.py` 补 `OpenAICompatEmbedder`（httpx/openai SDK，默认百炼/DeepSeek 等）/ `OllamaEmbedder`，结果哈希持久化缓存（避免重复计费）；`domains/kb/tools.py` 补 `kb_ask`（kb_search 上下文 → LLM 生成带引用回答）；M3-09 成本验证（真实 embedding 缓存命中率、LLM token 统计）。
+- 说明：`rag/embedding.py` 补 `OpenAICompatEmbedder`（openai SDK，默认百炼/DeepSeek 等）/ `OllamaEmbedder`，结果哈希持久化缓存（`data/embedding_cache.jsonl`，按 text+model 哈希避免重复计费）；`domains/kb/tools.py` 补 `kb_ask`（kb_search 上下文 → LLM 生成带引用回答）；M3-09 成本验证（真实 embedding 缓存命中率、LLM token 统计）。
 - 验收标准：两种后端可切换且缓存命中；kb_ask 全链路带引用；无 LLM Key 时明确降级提示。
-- 依赖：M3-06/08 + `uv add openai httpx`；规模：L；关键文件：`rag/embedding.py`、`domains/kb/tools.py`。
+- 依赖：M3-06/08 + `uv add openai httpx`；规模：L；关键文件：`rag/embedding.py`、`domains/kb/tools.py`。✅ 2026-08-14。
+  - M7-01 真实 Embedding 后端：`OpenAICompatEmbedder` / `OllamaEmbedder` 实现 `Embedder` Protocol（`dim` + `embed()`），含维度探测 `probe_dim()`（真实模型维度覆盖配置）；`get_embedder(settings)` 工厂按 `embedding_provider`（openai/ollama/fake）切换，默认 fake 保离线。
+  - M7-02 持久化缓存：`EmbeddingCache` 以 `sha256(model|dim|text)` 为 key 落盘 `data/embedding_cache.jsonl`（追加写 + threading.Lock + 启动加载），命中直接返回避免重复计费；`reset_data` 一并清理。
+  - M7-03 kb_ask：`kb_search` Top-K 带引用片段 → `_call_llm_answer`（openai SDK 调 `llm_*` 配置）生成带 `【来源：标题#seq】` 引用的回答；响应含 `answer/sources/degraded`。
+  - M7-04 配置与维度对齐：`embedding_provider` / `embedding_dim`；`_vector_store(dim=...)` 贯通 embedder 实际维度，入库/检索/向量库一致。
+  - M7-05 降级与成本验证：无 embedding Key → `get_embedder` 明确报错；无 LLM Key → `kb_ask` 降级返回检索片段 + 提示；EmbeddingCache hits/misses 计数、LLM token 统计；owner 隔离回归。
 
 ### M4 SVN/需求/项目/标签（依赖：M1）
 
@@ -428,7 +433,7 @@ M1: M1-01 → M1-02 → M1-03；M1-04（依赖 01/02）；M1-05（依赖 01）
 M2: M2-01 → M2-02 → M2-03、M2-04 → M2-06/M2-07；M2-05（依赖 02）；M2-08（依赖 02/03/04）
 M3: M3-01 → M3-05 → M3-06 → M3-07 → M3-08 → M3-09
     M3-02 → M3-03 → M3-04；M3-08 依赖 M3-04
-M7: M3-06/08（真实 Embedding 后端 + kb_ask）
+M7: M3-06/08（真实 Embedding 后端 + kb_ask）✅
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
     M4-08（依赖 03/05/06/07）
 M5: M5-01 → M5-02 → M5-03；M5-04 → M5-05
@@ -475,7 +480,7 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M3-07 | VectorStore + ChromaDB | M3-06 | ✅ | 2026-08-13 |
 | M3-08 | RAG 检索问答 | M3-05/06/07/04 | ✅ | 2026-08-13（kb_ask→M7） |
 | M3-09 | 用户隔离与成本控制 | M3-08 | ✅ | 2026-08-13 |
-| M7 | 真实 Embedding + kb_ask | M3-06/08 | ⬜ | 新增里程碑 |
+| M7 | 真实 Embedding + kb_ask | M3-06/08 | ✅ | 2026-08-14 |
 | M4-01 | svn CLI 封装 | M1-01 | ✅ | 2026-08-13（LocalFakeSvnClient 简化版） |
 | M4-02 | 凭据管理 | M4-01 | ✅ | 2026-08-13 |
 | M4-03 | svn 域工具 | M4-01/02 | ✅ | 2026-08-13（模拟实现） |

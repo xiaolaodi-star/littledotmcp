@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     embedding_base_url: str = Field(default="")
     embedding_api_key: str = Field(default="")
     embedding_model: str = Field(default="text-embedding-v3")
+    embedding_provider: str = Field(
+        default="fake",
+        description="openai：OpenAI 兼容端点；ollama：本地 Ollama；fake：离线确定性向量",
+    )
+    embedding_dim: int = Field(
+        default=32,
+        description="向量维度：openai(百炼 v3)=1024、Ollama 常见 768、fake=32",
+    )
 
     # ---- 存储（默认全走本地目录，零外部中间件）----
     db_url: str = Field(default="sqlite:///./data/littledotmcp.db")

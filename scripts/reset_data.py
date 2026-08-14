@@ -51,6 +51,12 @@ def reset_data() -> int:
         shutil.rmtree(vector_dir)
         removed.append(str(vector_dir))
 
+    # 清理真实 Embedding 结果持久化缓存（M7，按 storage_root 同级定位）
+    cache_file = Path(settings.storage_root).parent / "embedding_cache.jsonl"
+    if cache_file.exists():
+        cache_file.unlink()
+        removed.append(str(cache_file))
+
     if removed:
         for item in removed:
             print("已删除：", item)

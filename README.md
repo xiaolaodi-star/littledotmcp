@@ -84,10 +84,37 @@ uv run littledotmcp
 
 远程部署必须经 HTTPS 反代（禁止直暴露 8890 明文端口），模板见 `deploy/nginx.conf`（Nginx）与 `deploy/caddy.Caddyfile`（Caddy 自动 HTTPS）；`GET /health` 免鉴权供反代探测，其余路径一律要求 Bearer Token 且按 IP 限流。详细步骤见 [部署文档](docs/deploy.md)。
 
+## 知识库问答（kb_ask）与真实 Embedding
+
+默认 `EMBEDDING_PROVIDER=fake`（离线确定性向量，零成本，无需配置即可体验 kb 域全链路）。接入真实语义能力需在 `.env` 配置：
+
+```bash
+# ---- 方式一：OpenAI 兼容端点（百炼 / DeepSeek / 智谱等）----
+EMBEDDING_PROVIDER=openai
+EMBEDDING_API_KEY=你的Key
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1   # 按服务商调整
+EMBEDDING_MODEL=text-embedding-v3
+EMBEDDING_DIM=1024        # 须与模型一致（v3=1024；Ollama 常见 768）
+
+# ---- 方式二：本地 Ollama（无需 API Key）----
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_MODEL=bge-m3
+
+# ---- 生成式问答 kb_ask 所需的 LLM ----
+LLM_API_KEY=你的Key
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL=qwen-plus
+```
+
+- **kb_ask(query, top_k)**：基于知识库检索 Top-K 片段，经 LLM 生成带 `【来源：标题#序号】` 引用的回答；未配置 `LLM_API_KEY` 时自动降级返回检索片段并提示。
+- **成本控制**：真实 Embedding 结果按文本哈希持久化缓存到 `data/embedding_cache.jsonl`，重复内容不重复计费；`scripts/reset_data.py` 会一并清理。
+- 维度以首次探测结果为准（`probe_dim()`），换模型/维度后建议重置知识库（见下）。
+
 ## 重置知识库
 
 ```bash
-# 清空 data/ 下数据库与向量目录，重建空库（不删 .env/配置）
+# 清空 data/ 下数据库、向量目录与 Embedding 缓存，重建空库（不删 .env/配置）
 uv run python scripts/reset_data.py
 
 # 清空并注入规范示例模板

@@ -1,8 +1,8 @@
-"""kb 域 MCP 工具（M3-08）：kb_ingest / kb_search / kb_list / kb_delete。
+"""kb 域 MCP 工具（M3-08）：kb_ingest / kb_search / kb_list / kb_delete / kb_ask。
 
-- kb_ask（LLM 生成回答）与真实 Embedding 后端（OpenAI/Ollama）按用户决策
-  剥离至 M7 里程碑，本文件不暴露半成品接口；
-- 向量化本次用确定性 FakeEmbedder（离线可验收），M7 切换为真实 Embedder 即可热插拔；
+- 向量化经 get_embedder() 工厂按 EMBEDDING_PROVIDER 切换（M7）：
+  fake（离线确定性）/ openai（OpenAI 兼容端点）/ ollama（本地 Ollama）；
+- kb_ask（M7）：检索上下文经 LLM 生成带来源引用的回答，无 LLM Key 时降级；
 - 元数据落 kb_documents/kb_chunks（OwnerScopedRepository 强制 owner 隔离），
   向量落 SqliteVecVectorStore（owner_id/doc_id 强制注入，SQL 层 owner 过滤）。
 """
@@ -22,7 +22,7 @@ from ...db.models import KbChunk, KbDocument
 from ...domains.doc.storage import LocalDocStorage
 from ...domains.doc.tools import DocumentRepository
 from ...rag.chunker import chunk_text
-from ...rag.embedding import FakeEmbedder
+from ...rag.embedding import Embedder, get_embedder
 from ...rag.parsers import ParseError, parse_document
 from ...rag.vector_store import SqliteVecVectorStore
 from ...server import mcp
@@ -34,14 +34,16 @@ logger = get_logger(__name__)
 # stdio 单人模式固定归属；http 多用户模式（M6）按鉴权上下文解析
 _DEFAULT_OWNER = "local"
 
-# 列表分页上限 / 检索上限 / FakeEmbedder 维度
+# 列表分页上限 / 检索上限
 _MAX_LIMIT = 100
 _MAX_TOP_K = 20
-_DIM = 32
 
 # 融合权重：向量 0.7 + BM25 0.3
 _VEC_WEIGHT = 0.7
 _BM25_WEIGHT = 0.3
+
+# kb_ask 注入 LLM 的上下文上限（防超长请求）
+_ASK_CONTEXT_CHARS = 8000
 
 
 def _current_owner() -> str:
@@ -49,14 +51,20 @@ def _current_owner() -> str:
     return _DEFAULT_OWNER
 
 
-def _embedder() -> FakeEmbedder:
-    """延迟创建向量化器（M7 切换真实 Embedder）。"""
-    return FakeEmbedder(dim=_DIM)
+def _embedder() -> Embedder:
+    """延迟创建向量化器（按 EMBEDDING_PROVIDER 工厂返回）。"""
+    return get_embedder()
 
 
-def _vector_store() -> SqliteVecVectorStore:
-    """延迟创建向量库（随配置实时，便于测试重定向）。"""
-    return SqliteVecVectorStore(get_settings().vector_dir, dim=_DIM)
+def _vector_store(dim: int | None = None) -> SqliteVecVectorStore:
+    """延迟创建向量库（随配置实时，便于测试重定向）。
+
+    dim 不传时用配置 embedding_dim；调用方应尽量传 embedder 的实际维度，
+    保证入库/检索与向量库维度一致。
+    """
+    if dim is None:
+        dim = get_settings().embedding_dim
+    return SqliteVecVectorStore(get_settings().vector_dir, dim=dim)
 
 
 def _storage() -> LocalDocStorage:
@@ -114,7 +122,8 @@ def kb_ingest(doc_id: str) -> dict:
             chunks = chunk_text(text)
             if not chunks:
                 return fail(message="文档内容为空，无法切块")
-            vectors: list[list[float]] = _embedder().embed([c.content for c in chunks])
+            emb = _embedder()
+            vectors: list[list[float]] = emb.embed([c.content for c in chunks])
 
             kb_repo = KbDocumentRepository(session)
             old = kb_repo.get_by_storage_key(owner, doc.storage_key)
@@ -147,7 +156,7 @@ def kb_ingest(doc_id: str) -> dict:
                 vector_items.append((chunk_id, vec))
             session.flush()
             # 向量为外部存储，独立于 SQLite 事务；失败可整体重跑（幂等）
-            _vector_store().upsert(owner, kb_doc.id, vector_items)
+            _vector_store(dim=emb.dim).upsert(owner, kb_doc.id, vector_items)
             session.commit()
             result_id = kb_doc.id
             result_title = kb_doc.title
@@ -158,7 +167,7 @@ def kb_ingest(doc_id: str) -> dict:
                 "kb_doc_id": result_id,
                 "title": result_title,
                 "chunk_count": result_chunks,
-                "dim": _DIM,
+                "dim": emb.dim,
             },
             message="知识库录入成功",
         )
@@ -188,8 +197,9 @@ def kb_search(query: str, top_k: int = 5) -> dict:
             return fail(message="查询内容必填")
         if not 1 <= top_k <= _MAX_TOP_K:
             return fail(message=f"top_k 需在 1~{_MAX_TOP_K} 之间")
-        query_vec = _embedder().embed([query])[0]
-        vec_hits = _vector_store().search(owner, query_vec, top_k * 2)
+        emb = _embedder()
+        query_vec = emb.embed([query])[0]
+        vec_hits = _vector_store(dim=emb.dim).search(owner, query_vec, top_k * 2)
 
         with db_engine.SessionLocal() as session:
             chunk_repo = KbChunkRepository(session)
@@ -288,3 +298,71 @@ def kb_delete(kb_doc_id: str) -> dict:
     except Exception as exc:
         logger.exception("kb_delete 未预期错误")
         return fail(message=f"删除失败：{exc}")
+
+
+def _call_llm_answer(query: str, items: list[dict]) -> str | None:
+    """调用 OpenAI 兼容 LLM 生成带来源引用的回答；无 Key/失败返回 None。"""
+    settings = get_settings()
+    if not settings.llm_api_key:
+        return None
+    from openai import OpenAI
+
+    context = "\n\n".join(
+        f"[{i + 1}] 来源：{item['title']}#{item['seq']}\n{item['content']}"
+        for i, item in enumerate(items)
+    )
+    client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url or None)
+    resp = client.chat.completions.create(
+        model=settings.llm_model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "你是知识库问答助手。仅依据提供的参考资料回答问题，"
+                    "并用【来源：标题#序号】标注引用出处；资料不足时如实说明，不要编造。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"问题：{query}\n\n参考资料：\n{context[:_ASK_CONTEXT_CHARS]}",
+            },
+        ],
+        temperature=0.2,
+    )
+    content = resp.choices[0].message.content
+    return content.strip() if content else None
+
+
+@mcp.tool(
+    name="kb_ask",
+    description=(
+        "知识库问答：先混合检索 Top-K 相关片段，再经 LLM 生成带【来源：标题#序号】"
+        "引用的回答（未配置 LLM_API_KEY 时降级返回检索片段）。"
+    ),
+)
+def kb_ask(query: str, top_k: int = 5) -> dict:
+    """基于知识库的生成式问答（检索 → LLM 引用回答，无 Key 降级片段）。"""
+    search_result = kb_search(query=query, top_k=top_k)
+    if not search_result["success"]:
+        return search_result
+    items = search_result["data"]["items"]
+    if not items:
+        return ok(data={"answer": "", "sources": [], "degraded": False}, message="知识库无相关内容")
+    try:
+        answer = _call_llm_answer(query, items)
+    except Exception as exc:
+        logger.warning("kb_ask LLM 调用失败，降级返回检索片段：%s", exc)
+        answer = None
+    if not answer:
+        return ok(
+            data={
+                "answer": "（未配置 LLM_API_KEY 或调用失败，以下为检索片段，请配置后重试）",
+                "sources": items,
+                "degraded": True,
+            },
+            message="LLM 不可用，已降级返回检索片段",
+        )
+    return ok(
+        data={"answer": answer, "sources": items, "degraded": False},
+        message="生成回答完成",
+    )

@@ -6,7 +6,7 @@
 
 # littledotmcp 架构设计（知识库）
 
-> 维护者：朱世航 ｜ 最后更新：2026-08-13 ｜ 状态：M0 起逐里程碑落地
+> 维护者：朱世航 ｜ 最后更新：2026-08-14 ｜ 状态：M0 起逐里程碑落地
 
 ## 1. 定位
 
@@ -50,16 +50,17 @@
   storage_key、防路径穿越、owner 分目录）；元数据落 `documents` 表经
   `OwnerScopedRepository` 强制隔离；provider 恒 LOCAL（企微后端随 M3-03 延后）；
   解析器 `rag/parsers` 按扩展名路由 txt/md/pdf/docx，损坏文件可读报错。
-- **ADR-8 kb 域 RAG（M3-05~09 落地，真实 LLM/Embedding 随 M7）**：RAG 链路
+- **ADR-8 kb 域 RAG（M3-05~09 落地，M7 补真实后端）**：RAG 链路
   采用"抽象隔离 + 离线 Fake 验收"：`rag/chunker`（中文分句 + token 预算 +
-  10% 重叠 + 锚点）、`rag/embedding.Embedder` 抽象（真实 OpenAI/Ollama 后端
-  留 M7）、`rag/vector_store` 抽象 + `SqliteVecVectorStore`（sqlite-vec 扩展，
-  `VECTOR_DIR` 下 `kb_vectors.db`，**检索强制 owner_id 过滤**；2026-08-13 因
-  chromadb 1.5.9 Rust 绑定在 Windows+Py3.12 崩溃，经用户决策完全替换 chromadb）；
-  kb 域工具 `kb_ingest`（doc 原文→解析→切块→embed→kb_documents/
-  kb_chunks + 向量 upsert，同源幂等）/ `kb_search`（向量 Top-K + 本地 BM25
-  自实现融合，返回来源引用）/ `kb_list` / `kb_delete`（chunks→向量→doc 事务
-  一致）；`kb_ask` 与真实 Embedding 后端按用户决策剥离至 M7。
+  10% 重叠 + 锚点）、`rag/embedding.Embedder` 抽象（M7 落地真实 OpenAI/Ollama
+  后端，见 ADR-12）、`rag/vector_store` 抽象 + `SqliteVecVectorStore`
+  （sqlite-vec 扩展，`VECTOR_DIR` 下 `kb_vectors.db`，**检索强制 owner_id
+  过滤**；2026-08-13 因 chromadb 1.5.9 Rust 绑定在 Windows+Py3.12 崩溃，
+  经用户决策完全替换 chromadb）；kb 域工具 `kb_ingest`（doc 原文→解析→
+  切块→embed→kb_documents/kb_chunks + 向量 upsert，同源幂等）/
+  `kb_search`（向量 Top-K + 本地 BM25 自实现融合，返回来源引用）/
+  `kb_list` / `kb_delete`（chunks→向量→doc 事务一致）；`kb_ask`（M7）基于
+  `kb_search` 检索上下文经 LLM 生成带引用回答。
 - **ADR-9 M4 四域（svn/requirement/project/tag，2026-08-13 落地简化版）**：
   svn 域采用 `SvnClient` 抽象 + `LocalFakeSvnClient`（临时目录模拟，无需真实
   svn CLI，凭据加解密用标准库实现）；requirement 域实现状态枚举
@@ -85,5 +86,17 @@
   与 `build_http_app()` 中间件组装（CORS + 限流 + 鉴权，后加者在外层）；
   反代模板 `deploy/nginx.conf`/`deploy/caddy.Caddyfile`（HTTPS→8890）；
   交付 `uv build`（wheel+sdist），`scripts/reset_data.py` 提供知识重置。
+- **ADR-12 真实 Embedding + kb_ask（M7，2026-08-14 落地）**：`rag/embedding.py`
+  在 `Embedder` Protocol 下新增两个真实实现——`OpenAICompatEmbedder`（openai
+  SDK，`llm_*`/`embedding_*` 配置，覆盖百炼/DeepSeek 等 OpenAI 兼容端点）与
+  `OllamaEmbedder`（httpx 直连 `/api/embed`，无需 Key），均支持 `probe_dim()`
+  维度探测（真实模型维度覆盖配置）；真实结果经 `EmbeddingCache` 持久化缓存
+  （`sha256(model|dim|text)` 为 key 落盘 `data/embedding_cache.jsonl`，追加写 +
+  线程锁，命中免网络调用降本）；`get_embedder(settings)` 工厂按
+  `embedding_provider`（openai/ollama/fake）切换，默认 fake 保离线；kb 域
+  `_embedder()` 改走工厂、`_vector_store(dim=...)` 贯通 embedder 实际维度
+  （入库/检索/向量库一致）；`kb_ask`（M7-03）复用 `kb_search` 检索 Top-K
+  片段 → `_call_llm_answer`（openai SDK 调 `llm_*`）生成带
+  `【来源：标题#seq】` 引用的回答，无 LLM Key 降级返回检索片段并提示。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

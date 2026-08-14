@@ -21,6 +21,8 @@ dependencies = [
     "markdown>=3.10.3",
     "sqlite-vec>=0.1.9",
     "uvicorn>=0.52.1",
+    "openai>=3.0.0",
+    "httpx>=0.28.1",
 ]
 
 # 开发依赖（uv sync 默认安装；按里程碑经 uv add 补充领域依赖：sqlglot 等见 docs/PLAN.md）
