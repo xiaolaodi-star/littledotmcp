@@ -229,7 +229,7 @@ uv build   # 产物在 dist/（wheel + sdist）
 - [任务计划（WBS）](docs/PLAN.md) — 详细规范化任务清单与进度，**项目唯一任务事实来源**
 - [架构设计](docs/architecture.md)（随里程碑回写）
 - [已知限制](docs/limitations.md)（随里程碑维护）
-- [部署与使用](docs/deploy.md)（M6：三种形态 / 反代 / 配置 / 重置）
+- [部署与使用](docs/deploy.md)（M6/M11：三种形态 / 反代 / 配置 / 重置 / 管理端 Web Console）
 - [端到端验收清单](docs/acceptance.md)（M6：stdio / 远程 / 打包三形态）
 
 ## 许可

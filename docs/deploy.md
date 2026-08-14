@@ -1,12 +1,12 @@
 <!--
-部署与使用文档（M6-06）
-覆盖：环境要求、三种启动形态、远程 HTTPS 反代、知识库重置、打包交付。
-任务事实源见 PLAN.md M6-01~06。
+部署与使用文档（M6-06 + M11）
+覆盖：环境要求、三种启动形态、远程 HTTPS 反代、知识库重置、打包交付、管理端 Web Console。
+任务事实源见 PLAN.md M6-01~06 与 M11-01~06。
 -->
 
 # 部署与使用文档
 
-> 维护者：朱世航 ｜ 最后更新：2026-08-14
+> 维护者：朱世航 ｜ 最后更新：2026-08-14（M11 管理端补充）
 
 ## 1. 环境要求
 
@@ -60,6 +60,8 @@ uv run littledotmcp
 }
 ```
 
+> 注：http 模式同时提供管理端 Web Console（M11），同端口访问 `/admin/`，详见 §8。
+
 ### 2.3 源码运行（开发/调试）
 
 ```bash
@@ -90,13 +92,16 @@ Caddy 首次访问自动申请 Let's Encrypt 证书，无需手工配置。
 |------|------|------|
 | `MCP_TRANSPORT` | `stdio` | `stdio` 或 `http` |
 | `MCP_AUTH_TOKEN` | 空 | http 模式必填；远程 Bearer 共享密钥 |
-| `HTTP_HOST` | `0.0.0.0` | http 监听地址 |
+| `HTTP_HOST` | `0.0.0.0` | http 监听地址；默认全网卡且**明文无证书**，远程暴露务必前置 HTTPS 反代，否则启动会打印安全告警 |
 | `HTTP_PORT` | `8890` | http 监听端口 |
 | `DB_URL` | `sqlite:///./data/littledotmcp.db` | 业务库 |
 | `STORAGE_ROOT` | `./data/files` | 文档/文件存储根目录 |
 | `VECTOR_DIR` | `./data/vectors` | 向量库目录 |
 | `LOG_DIR` | `./data/logs` | 日志目录 |
 | `STANDARD_TEMPLATES` | 空 | 置 `1` 时首次启动注入规范示例模板 |
+| `ADMIN_BOOTSTRAP_USER` | 空 | 一次性引导：空库首次启动自动创建的管理员用户名（须与 `ADMIN_BOOTSTRAP_PASSWORD` 配对） |
+| `ADMIN_BOOTSTRAP_PASSWORD` | 空 | 一次性引导：与 `ADMIN_BOOTSTRAP_USER` 配对使用，建号后即失效（不设则走 §8.2 浏览器 setup 表单） |
+| `ADMIN_SESSION_HOURS` | `12` | 管理端登录会话有效期（小时） |
 
 ## 5. 知识库重置
 
@@ -132,10 +137,67 @@ littledotmcp
 ## 7. 健康检查
 
 - `GET /health` → `{"status": "ok", "service": "littledotmcp"}`（免鉴权，供反代探测）
+- `GET /admin/` 需登录（未登录 302 至登录页）；`/admin/api/*` 除 `login`/`setup` 外均要求携带管理端 Session Cookie（`littledot_session`）
 - 其余路径一律要求 `Authorization: Bearer <token>`
 
-## 8. 常见问题
+## 8. 管理端 Web Console（M11）
+
+M11 在 http 模式下随进程提供一套内嵌 Web 管理端（同端口、同进程），用于日常管理业务数据，与 MCP 接口并存互不干扰。
+
+### 8.1 访问地址
+
+- 管理端入口：`http://127.0.0.1:8890/admin/`（即 http 监听端口 + `/admin/` 前缀）
+- 管理 API：`/admin/api/*`（`login` / `logout` / `me` / `setup` / `documents` / `kb` / `users` / `errors` / `system/*`）
+- 静态资源：`/admin/static/*`
+
+### 8.2 首次初始化管理员（二选一）
+
+**方式一：环境变量自动引导（推荐脚本化）**
+
+启动前设置一次性环境变量，空库首次启动时自动创建管理员：
+
+```bash
+export ADMIN_BOOTSTRAP_USER=admin
+export ADMIN_BOOTSTRAP_PASSWORD="强密码，勿用默认值"
+uv run littledotmcp
+```
+
+- 仅 `users` 表为空时生效；库非空则跳过并打印日志；
+- 建号后环境变量即完成使命，不设任何持久化默认口令；
+- 未设置该变量时，可改走方式二。
+
+**方式二：浏览器 setup 表单**
+
+空库启动后直接访问 `http://127.0.0.1:8890/admin/`，页面走 `/admin/api/setup` 创建首个管理员；库非空时该路由自动关闭。
+
+> 两种方式都杜绝"默认口令"：不初始化则无法登录管理端。
+
+### 8.3 登录与会话
+
+- 登录：`POST /admin/api/login`（用户名 + 密码，argon2 校验）；
+- 会话：独立 `user_sessions` 表，Cookie 名 `littledot_session`，HttpOnly + SameSite=Strict，默认 12h 过期（`ADMIN_SESSION_HOURS` 可调）；
+- 登出：`POST /admin/api/logout` 销毁会话；
+- 管理端登录态与 MCP 用户 Token（`users.token`）完全分离，互不影响。
+
+### 8.4 角色与权限边界
+
+| 角色 | 权限 |
+|------|------|
+| `admin` | 跨 owner 运维视图：管理全部文档 / 知识库 / 用户 / 错误审计 / 系统状态 |
+| `user` | 仅本人数据（按 `owner_id` 隔离），越权访问返回 403 |
+
+用户由 admin 通过 `/admin/api/users` 创建（`create_user` 默认 `role=user`），并写入审计日志。
+
+### 8.5 安全提示
+
+- 管理端与 MCP 共用端口，**无独立 TLS**：仅限本机或可信内网使用；
+- 远程公网访问必须前置 HTTPS 反代（复用 §3），并配置强密码管理员；
+- `HTTP_HOST=0.0.0.0` 启动时会打印明文安全告警，生产环境请收口监听地址或走反代。
+
+## 9. 常见问题
 
 - **http 启动即退出**：未设置 `MCP_AUTH_TOKEN`。远程模式强制要求，见配置表。
 - **反代 502**：确认 8890 已监听、`/mcp` 前缀与 `location /mcp` 匹配。
 - **权限问题（Linux）**：`data/` 需运行用户可写。
+- **管理端打不开**：确认以 `MCP_TRANSPORT=http` 启动（stdio 模式不提供管理端），并访问 `/admin/` 而非 `/mcp`。
+- **忘了管理员密码**：库非空时 `ADMIN_BOOTSTRAP` 与 `/admin/api/setup` 均失效。处理方式：备份后清空 `users`/`user_sessions` 表（或重置数据）后重新初始化；日常用户由 admin 在管理端管理。
