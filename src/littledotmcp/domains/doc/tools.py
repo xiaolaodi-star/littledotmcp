@@ -1,8 +1,9 @@
 """doc 域 MCP 工具（M3-04）：doc_save/read/search/list/delete。
 
-- provider 恒为 LOCAL（企微后端 M3-03 延后）
+- provider 支持 LOCAL（默认）与 WECOM（M9 企微后端骨架）
 - 元数据落 documents 表，经 OwnerScopedRepository 强制 owner 隔离
-- 原文落 LocalDocStorage（storage_root/owner_id/storage_key）
+- LOCAL 原文落 LocalDocStorage（storage_root/owner_id/storage_key）
+- WECOM 原文存于企微侧，storage_key 语义为企微 docid
 """
 
 from __future__ import annotations
@@ -22,8 +23,11 @@ from ...db.repository import OwnerScopedRepository
 from ...rag.parsers import ParseError, parse_document
 from ...server import mcp
 from .storage import DEFAULT_SIZE_LIMIT, LocalDocStorage
+from .wecom import WeComDocClient, build_wecom_client
 
 logger = get_logger(__name__)
+
+_VALID_PROVIDERS = {"LOCAL", "WECOM"}
 
 # stdio 单人模式固定归属；http 多用户模式（M6）按鉴权上下文解析
 _DEFAULT_OWNER = "local"
@@ -99,14 +103,24 @@ def _doc_to_dict(doc: Document) -> dict:
 @mcp.tool(
     name="doc_save",
     description=(
-        "保存文档到本地：content 传文本内容，或 path 传本地文件路径（原文整体存储）。"
+        "保存文档：content 传文本内容，或 path 传本地文件路径（原文整体存储）。"
+        "provider=LOCAL（默认）存本地；provider=WECOM 存企微侧（M9 骨架）。"
         "落 documents 表元数据并返回文档 id。"
     ),
 )
-def doc_save(name: str, content: str = "", path: str = "", mime: str = "") -> dict:
+def doc_save(
+    name: str,
+    content: str = "",
+    path: str = "",
+    mime: str = "",
+    provider: str = "LOCAL",
+) -> dict:
     """保存文档（content 与 path 二选一）。"""
     owner = _current_owner()
     try:
+        provider = (provider or "LOCAL").strip().upper()
+        if provider not in _VALID_PROVIDERS:
+            return fail(message=f"不支持的 provider：{provider}")
         if not name.strip():
             return fail(message="文档名必填")
         if bool(content) == bool(path):
@@ -128,6 +142,9 @@ def doc_save(name: str, content: str = "", path: str = "", mime: str = "") -> di
             raw = content.encode("utf-8")
             effective_mime = mime or _infer_mime(name)
 
+        if provider == "WECOM":
+            return _save_wecom(owner, name, raw, effective_mime)
+        # LOCAL：原文落本地存储，storage_key 为 UUID
         storage_key = _storage().save(owner, raw, size_limit=DEFAULT_SIZE_LIMIT)
         with db_engine.SessionLocal() as session:
             repo = DocumentRepository(session)
@@ -155,25 +172,57 @@ def doc_save(name: str, content: str = "", path: str = "", mime: str = "") -> di
         return fail(message=f"保存失败：{exc}")
 
 
+def _save_wecom(owner: str, name: str, raw: bytes, effective_mime: str) -> dict:
+    """WECOM 分支：经 WeComDocClient 写入企微，storage_key 为企微 docid。"""
+    client: WeComDocClient = build_wecom_client()
+    ok_flag, doc_id, msg = client.write_doc(name.strip(), raw.decode("utf-8", errors="replace"))
+    if not ok_flag:
+        return fail(message=f"企微保存失败：{msg}")
+    with db_engine.SessionLocal() as session:
+        repo = DocumentRepository(session)
+        doc = Document(
+            id=uuid.uuid4().hex,
+            owner_id=owner,
+            name=name.strip(),
+            provider="WECOM",
+            storage_key=doc_id,
+            size=len(raw),
+            mime=effective_mime,
+        )
+        repo.add(doc)
+        session.commit()
+        logger.info("doc_save(WECOM) 完成 id=%s docid=%s", doc.id, doc_id)
+    return ok(
+        data={"id": doc.id, "name": doc.name, "size": doc.size, "mime": doc.mime, "provider": "WECOM"},
+        message="企微保存成功",
+    )
+
+
 @mcp.tool(
     name="doc_read",
     description=(
         "读取文档原文内容（UTF-8 文本）；max_chars 控制返回长度，超长自动截断并标记 truncated。"
     ),
 )
-def doc_read(doc_id: str, max_chars: int = 100_000) -> dict:
-    """读取文档原文。"""
+def doc_read(doc_id: str, max_chars: int = 100_000, provider: str = "") -> dict:
+    """读取文档原文。provider=WECOM 时从企微侧读取（M9 骨架）。"""
     owner = _current_owner()
     try:
+        if max_chars < 1:
+            return fail(message="max_chars 必须大于 0")
         with db_engine.SessionLocal() as session:
             doc = DocumentRepository(session).get_by_owner(owner, doc_id)
             if doc is None:
                 return fail(message="文档不存在")
+            effective_provider = (provider or doc.provider or "LOCAL").strip().upper()
+            if effective_provider not in _VALID_PROVIDERS:
+                return fail(message=f"不支持的 provider：{effective_provider}")
+            if effective_provider == "WECOM":
+                return _read_wecom(doc, max_chars)
             raw = _storage().load(owner, doc.storage_key)
+            provider_label = "LOCAL"
         text = raw.decode("utf-8", errors="replace")
         total = len(text)
-        if max_chars < 1:
-            return fail(message="max_chars 必须大于 0")
         truncated = total > max_chars
         return ok(
             data={
@@ -183,6 +232,7 @@ def doc_read(doc_id: str, max_chars: int = 100_000) -> dict:
                 "content": text[:max_chars],
                 "truncated": truncated,
                 "total_chars": total,
+                "provider": provider_label,
             },
             message="读取成功",
         )
@@ -193,6 +243,28 @@ def doc_read(doc_id: str, max_chars: int = 100_000) -> dict:
     except Exception as exc:
         logger.exception("doc_read 未预期错误")
         return fail(message=f"读取失败：{exc}")
+
+
+def _read_wecom(doc: Document, max_chars: int) -> dict:
+    """WECOM 分支：经 WeComDocClient 读取企微文档，保留截断逻辑。"""
+    client: WeComDocClient = build_wecom_client()
+    ok_flag, content, msg = client.read_doc(doc.storage_key)
+    if not ok_flag:
+        return fail(message=f"企微读取失败：{msg}")
+    total = len(content)
+    truncated = total > max_chars
+    return ok(
+        data={
+            "id": doc.id,
+            "name": doc.name,
+            "mime": doc.mime,
+            "content": content[:max_chars],
+            "truncated": truncated,
+            "total_chars": total,
+            "provider": "WECOM",
+        },
+        message="企微读取成功",
+    )
 
 
 @mcp.tool(
