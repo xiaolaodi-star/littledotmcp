@@ -109,5 +109,12 @@
   token 获取与缓存、文档读写抽象，httpx）；`documents.provider` 字段已就绪
   （LOCAL/WECOM，默认 LOCAL），M9-02 起 `doc_save/doc_read` 支持 provider
   参数按后端路由；LOCAL 主链不破坏，未配置凭据时降级提示。
+- **ADR-15 服务运维管理（M10，规划中，下一里程碑）**：承接 M6 远程部署与 M7
+  真实 Embedding 的运维诉求，`server.py` 新增 `custom_route("/metrics")`
+  暴露指标（复用 M7 `EmbeddingCache.hits/misses` 缓存计数、M6 限流计数）；
+  `domains/admin/tools.py` 提供 `admin_config_check`（配置就绪诊断）、
+  `admin_tools`（工具清单）、`admin_stats`（各域数据量，owner 隔离）、
+  `admin_reset`（复用 `scripts/reset_data.reset_data()`）；管理权限复用 M6
+  共享 Token 快路径，普通用户 Token 拒绝 `admin_*`，避免远程越权运维。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

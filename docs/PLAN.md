@@ -453,6 +453,36 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：provider 切换不破坏 LOCAL 主链；企微分支 mock 可跑通；owner 隔离保持。
 - 依赖：M9-01 + M3-04；规模：M；关键文件：`domains/doc/tools.py`、`domains/doc/storage.py`。
 
+### M10 服务运维管理（后续里程碑，依赖：M6/M7）
+
+> 承接远程部署（M6）与真实 Embedding（M7）后的运维诉求：暴露服务指标、工具清单、配置就绪诊断、各域数据量统计与一键重置，并加管理权限隔离（复用 M6 共享 Token），避免远程多用户下越权运维。
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| M10-01 | `/metrics` 指标端点 + `admin_config_check` 配置就绪诊断 | ⬜ |
+| M10-02 | `admin_tools` 工具清单 + `admin_stats` 各域数据量 | ⬜ |
+| M10-03 | `admin_reset` 一键重置 + 管理权限中间件 | ⬜ |
+
+**M10-01 指标与配置诊断**
+- 说明：Starlette `custom_route("/metrics", GET)` 返回 Prometheus 风格文本（工具调用计数、限流命中、Embedding 缓存命中率取自 `EmbeddingCache.hits/misses`）；`admin_config_check()` MCP 工具校验 `LLM_API_KEY`/`EMBEDDING_API_KEY` 是否配置、`embedding_provider`/`llm_model` 取值，给出可读诊断。
+- 验收标准：`/metrics` 可抓；`admin_config_check` 准确反映降级原因（无 Key 自动降级场景）。
+- 依赖：M6-01（路由）/ M7-02（缓存计数）；规模：S；关键文件：`server.py`、`domains/admin/tools.py`（新）。
+
+**M10-02 工具清单与数据量统计**
+- 说明：`admin_tools()` 返回已注册工具数及各域清单（复用 `mcp.list_tools()`）；`admin_stats()` 返回各域数据量（documents / kb_documents+kb_chunks / svn_repos+svn_ops_log / tags+entity_tags / projects+tasks / requirements），owner 隔离下仅统计当前 owner。
+- 验收标准：`admin_tools` 与实际注册一致；`admin_stats` 计数正确且隔离。
+- 依赖：M1-04（Repository 隔离）；规模：M；关键文件：`domains/admin/tools.py`（新）。
+
+**M10-03 重置与管理权限**
+- 说明：`admin_reset()` MCP 工具 import 复用 `scripts/reset_data.reset_data()`（可选 `standard_templates` 参数），返回清理项清单；新增管理权限判定（复用 M6 `AuthMiddleware` 的共享 Token 快路径 `mcp_auth_token`），`admin_*` 工具限定本地或持有共享 Token 调用，普通用户 Token 拒绝，避免远程越权运维。
+- 验收标准：`admin_reset` 调用等价于 CLI 重置；普通 Token 调 `admin_*` 被拒（401/权限错误）；共享 Token 可调用。
+- 依赖：M6-02（鉴权）/ M3-05（reset_data 已含缓存清理）；规模：M；关键文件：`domains/admin/tools.py`、`auth_middleware.py`。
+
+**边界与防回归**
+- `admin_*` 严格限定为服务运维，不承载业务管理（业务管理归入各自域，如 M8 追溯、M9 企微）。
+- 复用既有能力：指标计数源自 M7 `EmbeddingCache`；重置复用 `scripts/reset_data.py`；权限复用 M6 共享 Token，不新增鉴权模型。
+- owner 隔离在所有 `admin_stats` 查询中强制生效，不泄露他人数据。
+
 ---
 
 ## 4. 横切任务（贯穿各里程碑）
@@ -482,11 +512,13 @@ M8: M8-02（SvnOpLog 补列+svn_commit 关联）→ M8-01（trace 工具）；M8
     M8 依赖：M4-03/05/06/07（追溯聚合数据源）
 M9: M9-01（企微客户端骨架）→ M9-02（doc provider 切换）
     M9 依赖：M3-02（DocStorage 抽象）+ M3-04（doc 工具）
+M10: M10-01（指标+诊断）→ M10-02（工具清单+统计）；M10-03（重置+权限，依赖 02）
+    M10 依赖：M6-01/02（路由+鉴权）/ M7-02（缓存计数）/ M3-05（reset_data）
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
     M4-08（依赖 03/05/06/07，落地于 M8）
 M5: M5-01 → M5-02 → M5-03；M5-04 → M5-05
 M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部）
-里程碑建议顺序：M0 → M1 → M2 ‖ M3 ‖ M4 ‖ M5 → M6 → M8 → M9（M2~M5 可并行）
+里程碑建议顺序：M0 → M1 → M2 ‖ M3 ‖ M4 ‖ M5 → M6 → M8 → M9 → M10（M2~M5 可并行）
 ```
 
 ---
@@ -554,6 +586,9 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M8-03 | 文档/标签聚合 | M8-01/M4-07 | ⬜ | 待执行 |
 | M9-01 | 企微文档客户端骨架 | M3-02 | ⬜ | 延后里程碑 |
 | M9-02 | doc provider 切换 | M9-01/M3-04 | ⬜ | 延后里程碑 |
+| M10-01 | 指标端点 + 配置诊断 | M6-01/M7-02 | ⬜ | 待执行 |
+| M10-02 | 工具清单 + 数据量统计 | M1-04 | ⬜ | 待执行 |
+| M10-03 | 重置工具 + 管理权限 | M6-02/M3-05 | ⬜ | 待执行 |
 
 ---
 
@@ -582,3 +617,4 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 - **M6**：三形态全部可运行；他人按文档可独立部署空知识库；验收清单绿。
 - **M8**：requirement_trace 端到端可查；svn_commit 关联需求落库；文档/标签聚合完整；隔离测试绿。
 - **M9**：企微客户端骨架 mock 跑通；doc provider 切换不破坏 LOCAL 主链。
+- **M10**：`/metrics` 可抓、配置诊断准确；工具清单/数据量统计正确且隔离；`admin_reset` 等价 CLI 且普通 Token 越权被拒。
