@@ -121,6 +121,40 @@ uv run python scripts/reset_data.py
 STANDARD_TEMPLATES=1 uv run python scripts/reset_data.py
 ```
 
+## 服务运维管理（M10）
+
+为远程部署与真实 Embedding 后的服务提供可观测、可诊断、可统计、可重置的运维能力，严格限定服务运维，不承载业务管理。
+
+### 指标端点 `/metrics`
+
+远程部署（HTTPS 反代后）暴露 Prometheus 文本格式指标，仅含非敏感聚合：
+
+```bash
+curl -s https://mcp.example.com/metrics
+# 示例：
+# process_uptime_seconds 1234.567
+# embedding_cache_hits 42
+# embedding_cache_misses 8
+# embedding_cache_hit_rate 0.8400
+# embed_calls 50
+# service_info{version="0.1.0"} 1
+```
+
+指标在进程内跨调用持续累积（缓存命中率、embed 调用次数等），可用于监控面板与降级告警。
+
+### MCP 运维工具 `admin_*`
+
+以下工具需在本地模式或持有共享 Token（owner 为 `local`）时调用，普通用户 Token 的 owner 非 `local` 会被拒绝：
+
+| 工具 | 说明 |
+|------|------|
+| `admin_config_check` | 诊断 LLM / Embedding / 鉴权 / 存储配置就绪状态，明确降级原因 |
+| `admin_tools` | 返回当前已注册 MCP 工具清单（名称 + 说明） |
+| `admin_stats` | 返回当前 owner 各域数据量统计（强制 owner 隔离，普通用户仅见自己数据） |
+| `admin_reset` | 一键重置（等价于 CLI `reset_data.py`），复用幂等重建空库，不删 `.env`/配置 |
+
+> 管理权限复用 M6 共享 Token 的 local owner 语义：MCP 工具无法读取 HTTP 头，故以 `_current_owner()=="local"` 作为管理员判定，零新增鉴权模型。多用户 http 场景的细粒度管理员区分将在 M9 OAuth 落地后自然生效（L-015）。
+
 ## 打包交付
 
 ```bash
