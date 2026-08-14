@@ -453,30 +453,30 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：provider 切换不破坏 LOCAL 主链；企微分支 mock 可跑通；owner 隔离保持。
 - 依赖：M9-01 + M3-04；规模：M；关键文件：`domains/doc/tools.py`、`domains/doc/storage.py`。
 
-### M10 服务运维管理（后续里程碑，依赖：M6/M7）
+### M10 服务运维管理（依赖：M6/M7，已完成 ✅ 2026-08-14）
 
-> 承接远程部署（M6）与真实 Embedding（M7）后的运维诉求：暴露服务指标、工具清单、配置就绪诊断、各域数据量统计与一键重置，并加管理权限隔离（复用 M6 共享 Token），避免远程多用户下越权运维。
+> 承接远程部署（M6）与真实 Embedding（M7）后的运维诉求：暴露服务指标、工具清单、配置就绪诊断、各域数据量统计与一键重置，并加管理权限隔离（复用 M6 local owner 语义），避免远程多用户下越权运维。
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M10-01 | `/metrics` 指标端点 + `admin_config_check` 配置就绪诊断 | ⬜ |
-| M10-02 | `admin_tools` 工具清单 + `admin_stats` 各域数据量 | ⬜ |
-| M10-03 | `admin_reset` 一键重置 + 管理权限中间件 | ⬜ |
+| M10-01 | `/metrics` 指标端点 + `admin_config_check` 配置就绪诊断 | ✅ 2026-08-14 |
+| M10-02 | `admin_tools` 工具清单 + `admin_stats` 各域数据量 | ✅ 2026-08-14 |
+| M10-03 | `admin_reset` 一键重置 + 管理权限（local owner） | ✅ 2026-08-14 |
 
 **M10-01 指标与配置诊断**
-- 说明：Starlette `custom_route("/metrics", GET)` 返回 Prometheus 风格文本（工具调用计数、限流命中、Embedding 缓存命中率取自 `EmbeddingCache.hits/misses`）；`admin_config_check()` MCP 工具校验 `LLM_API_KEY`/`EMBEDDING_API_KEY` 是否配置、`embedding_provider`/`llm_model` 取值，给出可读诊断。
-- 验收标准：`/metrics` 可抓；`admin_config_check` 准确反映降级原因（无 Key 自动降级场景）。
-- 依赖：M6-01（路由）/ M7-02（缓存计数）；规模：S；关键文件：`server.py`、`domains/admin/tools.py`（新）。
+- 说明：Starlette `custom_route("/metrics", GET)` 返回 Prometheus 文本格式（进程 uptime、Embedding 缓存命中/未命中/命中率、embed 调用次数、服务版本），指标取自 `rag/embedding.py` 模块级全局 `METRICS`（因 `get_embedder()` 每次重建 `EmbeddingCache` 实例，实例级计数无法跨调用，故改用进程级 `METRICS` + `incr()`）；`admin_config_check()` MCP 工具校验 `LLM_API_KEY`/`EMBEDDING_API_KEY`/`embedding_provider`/`mcp_auth_token`/`db_url` 就绪状态，给出可读降级诊断。
+- 验收标准：`/metrics` 可抓（200 + Prometheus 文本）；`admin_config_check` 准确反映降级原因（无 Key 自动降级场景）。
+- 依赖：M6-01（路由）/ M7（Embedding 指标）；规模：S；关键文件：`server.py`、`rag/embedding.py`、`domains/admin/tools.py`（新）。
 
 **M10-02 工具清单与数据量统计**
-- 说明：`admin_tools()` 返回已注册工具数及各域清单（复用 `mcp.list_tools()`）；`admin_stats()` 返回各域数据量（documents / kb_documents+kb_chunks / svn_repos+svn_ops_log / tags+entity_tags / projects+tasks / requirements），owner 隔离下仅统计当前 owner。
+- 说明：`admin_tools()` 通过同步 `mcp._tool_manager.list_tools()` 返回已注册工具清单（FastMCP `list_tools` 为异步，工具内同步调用须走 ToolManager）；`admin_stats()` 返回各域数据量（users / kb_documents+kb_chunks / documents / svn_repos+svn_ops_log / projects+milestones+tasks+requirements / tags+entity_tags / mindmaps / standards），owner 隔离下仅统计当前 owner。
 - 验收标准：`admin_tools` 与实际注册一致；`admin_stats` 计数正确且隔离。
 - 依赖：M1-04（Repository 隔离）；规模：M；关键文件：`domains/admin/tools.py`（新）。
 
 **M10-03 重置与管理权限**
-- 说明：`admin_reset()` MCP 工具 import 复用 `scripts/reset_data.reset_data()`（可选 `standard_templates` 参数），返回清理项清单；新增管理权限判定（复用 M6 `AuthMiddleware` 的共享 Token 快路径 `mcp_auth_token`），`admin_*` 工具限定本地或持有共享 Token 调用，普通用户 Token 拒绝，避免远程越权运维。
-- 验收标准：`admin_reset` 调用等价于 CLI 重置；普通 Token 调 `admin_*` 被拒（401/权限错误）；共享 Token 可调用。
-- 依赖：M6-02（鉴权）/ M3-05（reset_data 已含缓存清理）；规模：M；关键文件：`domains/admin/tools.py`、`auth_middleware.py`。
+- 说明：`admin_reset()` MCP 工具 import 复用 `scripts/reset_data.reset_data()`（复用 `init_db` 幂等重建空库），不删 `.env`/配置；管理权限复用 M6 共享 Token 的 local owner 语义（`_current_owner() == "local"` 即管理员），MCP 工具无法读取 HTTP 头，故零新增鉴权模型，`admin_reset`/`admin_config_check`/`admin_tools` 内判定非 local 即拒绝。
+- 验收标准：`admin_reset` 调用等价于 CLI 重置；普通 owner 调 `admin_*` 被拒（返回"需要管理员权限"）；local 可调用。
+- 依赖：M6-02（鉴权）/ M3-05（reset_data 已含缓存清理）；规模：M；关键文件：`domains/admin/tools.py`、`auth_middleware.py`（复用）。
 
 **边界与防回归**
 - `admin_*` 严格限定为服务运维，不承载业务管理（业务管理归入各自域，如 M8 追溯、M9 企微）。
@@ -586,9 +586,9 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M8-03 | 文档/标签聚合 | M8-01/M4-07 | ⬜ | 待执行 |
 | M9-01 | 企微文档客户端骨架 | M3-02 | ⬜ | 延后里程碑 |
 | M9-02 | doc provider 切换 | M9-01/M3-04 | ⬜ | 延后里程碑 |
-| M10-01 | 指标端点 + 配置诊断 | M6-01/M7-02 | ⬜ | 待执行 |
-| M10-02 | 工具清单 + 数据量统计 | M1-04 | ⬜ | 待执行 |
-| M10-03 | 重置工具 + 管理权限 | M6-02/M3-05 | ⬜ | 待执行 |
+| M10-01 | 指标端点 + 配置诊断 | M6-01/M7 | ✅ | 2026-08-14 |
+| M10-02 | 工具清单 + 数据量统计 | M1-04 | ✅ | 2026-08-14 |
+| M10-03 | 重置工具 + 管理权限 | M6-02/M3-05 | ✅ | 2026-08-14 |
 
 ---
 
@@ -617,4 +617,4 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 - **M6**：三形态全部可运行；他人按文档可独立部署空知识库；验收清单绿。
 - **M8**：requirement_trace 端到端可查；svn_commit 关联需求落库；文档/标签聚合完整；隔离测试绿。
 - **M9**：企微客户端骨架 mock 跑通；doc provider 切换不破坏 LOCAL 主链。
-- **M10**：`/metrics` 可抓、配置诊断准确；工具清单/数据量统计正确且隔离；`admin_reset` 等价 CLI 且普通 Token 越权被拒。
+- **M10**：`/metrics` 可抓、配置诊断准确；工具清单/数据量统计正确且隔离；`admin_reset` 等价 CLI 且普通 owner 越权被拒（local owner 语义）。

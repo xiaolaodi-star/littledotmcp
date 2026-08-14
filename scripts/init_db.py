@@ -9,11 +9,14 @@ from __future__ import annotations
 import os
 
 from littledotmcp.db import models  # noqa: F401 确保模型注册
-from littledotmcp.db.engine import engine
 from littledotmcp.db.models import Base
 
 
 def init_db() -> None:
+    # 动态读取 engine，避免模块导入时绑定导致测试 patch 失效（M10 修复）
+    from littledotmcp.db import engine as engine_mod
+
+    engine = engine_mod.engine
     Base.metadata.create_all(engine)
     print("数据库已初始化/更新（幂等）：", engine.url)
     if os.environ.get("STANDARD_TEMPLATES") == "1":

@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import threading
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -29,6 +30,27 @@ logger = logging.getLogger(__name__)
 DEFAULT_DIM = 32
 _DEFAULT_CACHE_FILE = "embedding_cache.jsonl"
 _DIM_PROBE_TEXT = "__littledotmcp_dim_probe__"
+
+# M10-01：模块级全局指标收集器。因 get_embedder() 每次重建 EmbeddingCache 实例，
+# 实例级 hits/misses 无法跨调用累积，故用进程级 METRICS 持久累积，供 /metrics 读取。
+METRICS: dict[str, int] = {
+    "embedding_cache_hits": 0,
+    "embedding_cache_misses": 0,
+    "embed_calls": 0,
+}
+_METRICS_LOCK = threading.Lock()
+_START_TIME = time.monotonic()
+
+
+def incr(name: str, n: int = 1) -> None:
+    """线程安全地累加全局指标（M10-01）。"""
+    with _METRICS_LOCK:
+        METRICS[name] = METRICS.get(name, 0) + n
+
+
+def uptime_seconds() -> float:
+    """进程已运行秒数（M10-01 /metrics 用）。"""
+    return time.monotonic() - _START_TIME
 
 
 class Embedder(Protocol):
@@ -55,6 +77,7 @@ class FakeEmbedder:
         self.misses = 0
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        incr("embed_calls")
         out: list[list[float]] = []
         for text in texts:
             cached = self._cache.get(text)
@@ -102,8 +125,10 @@ class EmbeddingCache:
             cached = self._data.get(key)
             if cached is not None:
                 self.hits += 1
+                incr("embedding_cache_hits")
                 return cached
             self.misses += 1
+            incr("embedding_cache_misses")
             return None
 
     def put(self, key: str, vec: list[float]) -> None:
@@ -159,6 +184,7 @@ class OpenAICompatEmbedder:
         return len(resp.data[0].embedding)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        incr("embed_calls")
         out: list[list[float]] = []
         to_fetch: list[str] = []
         keys: list[str | None] = []
@@ -220,6 +246,7 @@ class OllamaEmbedder:
         return len(data["embeddings"][0])
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        incr("embed_calls")
         out: list[list[float]] = []
         to_fetch: list[str] = []
         keys: list[str | None] = []

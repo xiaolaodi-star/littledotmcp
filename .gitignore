@@ -30,4 +30,4 @@ config/local.*.env
 # IDE
 .idea/
 .vscode/
-.codebuddy/
+.codebuddy/ 

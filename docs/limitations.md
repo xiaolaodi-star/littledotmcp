@@ -24,3 +24,5 @@
 | L-012 | M6 | 反代模板在 Nginx 侧终止 TLS（/health 免鉴权），终端到服务仍为 127.0.0.1 明文 | 信任边界在反代 | 保持本机回环部署；如需端到端加密可加 mTLS/自签 |
 | L-013 | M6 | `standalone（remote）` 首期为共享 Token 鉴权，非 MCP OAuth 2.1 授权码 | 细粒度用户会话/授权受限 | 多用户阶段升级 OAuth 2.1（ADR-6 演进路径） |
 | L-014 | M7 | Embedding 缓存为追加式 JSONL（`data/embedding_cache.jsonl`），无过期/淘汰策略；维度以首探结果为准 | 缓存文件随时间增长；换模型后旧向量缓存不再命中 | 命中率可经 EmbeddingCache.hits/misses 观察；reset_data 一键清理；换模型/维度建议重置 |
+| L-015 | M10 | 管理权限基于 M6 local owner 软隔离（`_current_owner()=="local"` 即管理员），非独立鉴权模型 | stdio 单人模式天然为 local 全权；http 模式未配 OAuth 前共享 Token 即 local，无法区分多用户管理员 | 越权风险仅在多用户 http 场景；M9 OAuth 落地后按 user.id 区分，普通用户 Token owner≠local 自动被拒（ADR-15） |
+| L-016 | M10 | `/metrics` 仅暴露非敏感聚合指标（进程 uptime、Embedding 缓存命中率/次数、embed 调用次数、服务版本），不含密钥/用户数据/逐请求明细 | 排障粒度限于进程级聚合 | 需要逐请求明细时结合日志；敏感信息不进指标端点 |

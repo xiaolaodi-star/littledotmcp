@@ -11,7 +11,7 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .auth_middleware import AuthMiddleware, RateLimitMiddleware
 from .common.logging import get_logger
@@ -39,6 +39,44 @@ async def health_check(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "service": "littledotmcp"})
 
 
+@mcp.custom_route("/metrics", methods=["GET"])
+async def metrics(request: Request) -> Response:
+    """Prometheus 文本格式指标（M10-01，仅非敏感聚合）。"""
+    from .rag.embedding import METRICS, uptime_seconds
+
+    hits = METRICS.get("embedding_cache_hits", 0)
+    misses = METRICS.get("embedding_cache_misses", 0)
+    total = hits + misses
+    rate = (hits / total) if total else 0.0
+    try:
+        from importlib.metadata import version
+
+        ver = version("littledotmcp")
+    except Exception:
+        ver = "unknown"
+    lines = [
+        "# HELP process_uptime_seconds 进程已运行秒数",
+        "# TYPE process_uptime_seconds gauge",
+        f"process_uptime_seconds {uptime_seconds():.3f}",
+        "# HELP embedding_cache_hits 向量缓存命中次数（M10-01）",
+        "# TYPE embedding_cache_hits counter",
+        f"embedding_cache_hits {hits}",
+        "# HELP embedding_cache_misses 向量缓存未命中次数（M10-01）",
+        "# TYPE embedding_cache_misses counter",
+        f"embedding_cache_misses {misses}",
+        "# HELP embedding_cache_hit_rate 向量缓存命中率（0~1）",
+        "# TYPE embedding_cache_hit_rate gauge",
+        f"embedding_cache_hit_rate {rate:.4f}",
+        "# HELP embed_calls 向量化调用次数",
+        "# TYPE embed_calls counter",
+        f"embed_calls {METRICS.get('embed_calls', 0)}",
+        "# HELP service_info 服务版本信息",
+        "# TYPE service_info gauge",
+        f'service_info{{version="{ver}"}} 1',
+    ]
+    return Response("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4")
+
+
 def register_tools() -> None:
     """导入各域工具模块，触发 @mcp.tool 注册。
 
@@ -48,8 +86,10 @@ def register_tools() -> None:
         M3: doc, kb（kb_ask 与真实 Embedding 待 M7）
         M4: svn, requirement, project, tag
         M5: mindmap, standard
+        M10: admin（服务运维管理：config_check/tools/stats/reset）
     """
     from .domains import hello  # noqa: F401  (占位连通测试)
+    from .domains.admin import tools as admin_tools  # noqa: F401  (注册 admin_* 运维工具，M10)
     from .domains.doc import (
         tools as doc_tools,  # noqa: F401  (注册 doc_save/read/search/list/delete)
     )
