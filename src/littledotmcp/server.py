@@ -118,6 +118,45 @@ def init_data() -> None:
     logger.info("数据库已初始化/更新（幂等）：%s", engine.url)
 
 
+def _ensure_mcp_routes_registered() -> None:
+    """确保所有 @mcp.custom_route / 工具 / 异常采集已注册。
+
+    必须在 mcp.streamable_http_app() 之前调用，否则自定义路由不会进入应用。
+    """
+    from .console import routes as _console_routes  # noqa: F401
+    from .console.errors import install_error_collector
+    from .domains import hello  # noqa: F401  (占位连通测试)
+    from .domains.admin import tools as admin_tools  # noqa: F401  (注册 admin_* 运维工具，M10)
+    # M11-03 调用异常采集：覆写 mcp.call_tool 包裹所有工具调用
+    install_error_collector(mcp)
+
+
+def _mount_console(app, *, with_mcp_auth: bool) -> None:
+    """给应用挂载管理端静态资源与中间件栈。
+
+    - 管理端 /admin/* 始终由 ConsoleAuthMiddleware + OwnerContextMiddleware 负责
+      （独立 Cookie Session，与 MCP Bearer Token 双轨并存）。
+    - with_mcp_auth=True（http 模式）时额外挂 CORS / RateLimit / AuthMiddleware，
+      保护 /mcp 端点需要 Bearer Token；
+      with_mcp_auth=False（stdio 模式附带管理端）时不挂 MCP Bearer 鉴权，
+      避免 stdio 模式无 MCP_AUTH_TOKEN 而拒绝所有 /admin 请求。
+    """
+    from .console import routes as _console_routes
+    from .console.middleware import ConsoleAuthMiddleware, OwnerContextMiddleware
+    from starlette.staticfiles import StaticFiles
+
+    # M11-05 管理端静态资源：/admin/static/* 由普通 StaticFiles 提供（正确 content-type），
+    # /admin/ 单页由 console.routes.admin_page (custom_route) 返回 index.html。
+    # mount 在 streamable_http_app 之后，确保 /admin/static/* 不被 /admin/ 路由吞掉。
+    app.mount("/admin/static", StaticFiles(directory=_console_routes.static_dir()), name="admin-static")
+    if with_mcp_auth:
+        app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+        app.add_middleware(RateLimitMiddleware)
+        app.add_middleware(AuthMiddleware)
+    app.add_middleware(OwnerContextMiddleware)
+    app.add_middleware(ConsoleAuthMiddleware)
+
+
 def build_http_app():
     """构建 streamable-http Starlette 应用并包装鉴权/限流/CORS 中间件。
 
@@ -125,27 +164,50 @@ def build_http_app():
     保证请求先过鉴权再过限流。ConsoleAuth 置于最内层，仅处理 /admin/* 段，
     与 /mcp 的 Bearer 双轨鉴权互不干扰。
     """
-    # 必须在 streamable_http_app() 之前导入，确保 @mcp.custom_route 已注册到 _custom_starlette_routes
-    from .console import routes as _console_routes  # noqa: F401
-    from .console.errors import install_error_collector
-    from .console.middleware import ConsoleAuthMiddleware, OwnerContextMiddleware
-    from .domains import hello  # noqa: F401  (占位连通测试)
-    from .domains.admin import tools as admin_tools  # noqa: F401  (注册 admin_* 运维工具，M10)
-    # M11-03 调用异常采集：覆写 mcp.call_tool 包裹所有工具调用
-    install_error_collector(mcp)
+    _ensure_mcp_routes_registered()
     app = mcp.streamable_http_app()
-    # M11-05 管理端静态资源：/admin/static/* 由普通 StaticFiles 提供（正确 content-type），
-    # /admin/ 单页由 console.routes.admin_page (custom_route) 返回 index.html。
-    # mount 在 streamable_http_app 之后，确保 /admin/static/* 不被 /admin/ 路由吞掉。
-    from starlette.staticfiles import StaticFiles
-
-    app.mount("/admin/static", StaticFiles(directory=_console_routes.static_dir()), name="admin-static")
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-    app.add_middleware(RateLimitMiddleware)
-    app.add_middleware(AuthMiddleware)
-    app.add_middleware(OwnerContextMiddleware)
-    app.add_middleware(ConsoleAuthMiddleware)
+    _mount_console(app, with_mcp_auth=True)
     return app
+
+
+def build_console_app():
+    """构建仅承载管理端的 Starlette 应用（用于 stdio 模式后台附带 HTTP 服务）。
+
+    复用 mcp.streamable_http_app() 天然包含的 /admin/* custom routes，但不挂
+    MCP Bearer 鉴权（stdio 模式无 MCP_AUTH_TOKEN），管理端以独立 Cookie Session 鉴权。
+    """
+    _ensure_mcp_routes_registered()
+    app = mcp.streamable_http_app()
+    _mount_console(app, with_mcp_auth=False)
+    return app
+
+
+def _serve_console_in_thread(host: str, port: int, log_level: str) -> None:
+    """在后台 daemon 线程内启动管理端 HTTP 服务，不阻塞调用方。"""
+    import asyncio
+    import threading
+    import uvicorn
+
+    def _run() -> None:
+        app = build_console_app()
+        config = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level=log_level,
+        )
+        server = uvicorn.Server(config)
+        # 子线程内不可安装信号处理器（否则报错），显式关闭。
+        server.install_signal_handlers = False
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(server.serve())
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_run, name="console-http", daemon=True)
+    t.start()
 
 
 def run() -> None:
@@ -184,6 +246,25 @@ def run() -> None:
         )
     elif transport == "stdio":
         logger.info("启动 stdio 传输")
+        # M11-07：stdio 模式额外在后台起一个 HTTP 服务承载管理端 Web Console，
+        # 主线程继续以 stdio 对外提供 MCP 能力；管理端以独立 Cookie Session 鉴权，
+        # 不依赖 MCP_AUTH_TOKEN，故 stdio 模式无需配置该 Token。
+        _serve_console_in_thread(
+            settings.http_host,
+            settings.http_port,
+            settings.log_level.lower(),
+        )
+        logger.info(
+            "stdio 模式已附带管理端 HTTP：http://%s:%s/admin/（本地浏览器可访问）",
+            settings.http_host,
+            settings.http_port,
+        )
+        if settings.http_host in ("0.0.0.0", ""):
+            logger.warning(
+                "⚠ 安全告警：管理端 HTTP 绑定在 %s（全网卡/任意地址）。管理端为明文无证书，"
+                "仅限本地或可信内网使用；公网暴露须前置反向代理启用 TLS，否则存在窃听与会话劫持风险。",
+                settings.http_host,
+            )
         mcp.run(transport="stdio")
     else:
         raise SystemExit(f"不支持的 MCP_TRANSPORT={transport!r}（可选 stdio/http）")

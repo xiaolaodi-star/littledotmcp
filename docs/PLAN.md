@@ -536,6 +536,7 @@ docs/
 | M11-04 | 管理 API：知识库/用户/异常/运维端点（复用业务层、owner 隔离与角色） | ✅ 2026-08-14 |
 | M11-05 | 管理端页面：静态单页（Dashboard/知识库/用户/异常/运维/个人中心） | ✅ 2026-08-14 |
 | M11-06 | 安全加固与文档回写：HTTP 绑定告警、审计、架构/限制/PLAN 更新 | ✅ 2026-08-14 |
+| M11-07 | stdio 模式附带管理端：后台线程起 HTTP 服务承载 /admin/，stdio MCP 通道不受影响 | ✅ 2026-08-14 |
 
 **M11-01 数据模型与迁移**
 - 说明：`db/models.py` 的 `User` 增加 `role: Mapped[str] = mapped_column(String(16), default="user")`（`admin`/`user`）；新增三张表：
@@ -580,6 +581,11 @@ docs/
 - 验收标准：文档与代码一致无漂移；限制清单覆盖已知边界；告警日志存在。
 - 依赖：M11-05；规模：S；关键文件：`docs/architecture.md`、`docs/limitations.md`、各 console 模块。
 
+**M11-07 stdio 模式附带管理端**
+- 说明：默认 `stdio` 模式（`MCP_TRANSPORT=stdio`）原先不挂载管理端 HTTP，本地用户无法用浏览器访问 `/admin/`。现改为：stdio 启动在保持 MCP stdio 传输（供本地客户端接入）的同时，由后台 daemon 线程额外起一个 uvicorn HTTP 服务承载管理端（`build_console_app()` 复用 `mcp.streamable_http_app()` 的 `/admin/*` custom routes，仅挂 `OwnerContextMiddleware` + `ConsoleAuthMiddleware`，**不挂** `AuthMiddleware`/`RateLimitMiddleware`，故不依赖 `MCP_AUTH_TOKEN`）。主线程继续 `mcp.run(transport="stdio")`，两通道互不影响。
+- 验收标准：`uv run littledotmcp`（默认 stdio）启动后浏览器访问 `http://127.0.0.1:8890/admin/` 可打开登录页并完成初始化/登录；MCP stdio 客户端接入不受影响；`0.0.0.0` 启动打印明文告警。
+- 依赖：M11-06；规模：S；关键文件：`server.py`（`_serve_console_in_thread` / `build_console_app` / `_mount_console`）。
+
 **边界与防回归**
 - 数据迁移沿用 M8 `_ALTERS` 幂等模式（存量库 ALTER 加 `users.role`，捕获 "duplicate column" 忽略）；新表由 `create_all` 自动建。
 - owner 隔离在所有管理查询中强制生效：admin 跨 owner 视图用显式查询，user 视图强制 `owner_id = 当前用户`，禁止调用方越权。
@@ -620,7 +626,7 @@ M9: M9-01（企微客户端骨架）→ M9-02（doc provider 切换）
     M9 依赖：M3-02（DocStorage 抽象）+ M3-04（doc 工具）
 M10: M10-01（指标+诊断）→ M10-02（工具清单+统计）；M10-03（重置+权限，依赖 02）
     M10 依赖：M6-01/02（路由+鉴权）/ M7-02（缓存计数）/ M3-05（reset_data）
-M11: M11-01（模型+迁移）→ M11-02（认证骨架）/ M11-03（异常采集）；M11-04（API，依赖 02+03）；M11-05（页面，依赖 04）；M11-06（文档回写，依赖 05）
+M11: M11-01（模型+迁移）→ M11-02（认证骨架）/ M11-03（异常采集）；M11-04（API，依赖 02+03）；M11-05（页面，依赖 04）；M11-06（文档回写，依赖 05）；M11-07（stdio 附带管理端，依赖 06）
     M11 依赖：M6-01/02（custom_route+鉴权基线）/ M10-02（admin_stats 复用）/ M10-03（reset_data 复用）/ M1-03（迁移模式）
     M11 形态：方案 A 同进程内嵌 Web（复用 custom_route，不引入 FastAPI/前端框架）
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
@@ -705,6 +711,7 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M11-04 | 管理 API（知识库/用户/异常/运维） | M11-02/M11-03 | ✅ | 2026-08-14 |
 | M11-05 | 管理端静态页面 | M11-04 | ✅ | 2026-08-14 |
 | M11-06 | 安全加固与文档回写 | M11-05 | ✅ | 2026-08-14 |
+| M11-07 | stdio 模式附带管理端 HTTP | M11-06 | ✅ | 2026-08-14 |
 
 ---
 

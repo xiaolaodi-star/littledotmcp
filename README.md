@@ -157,7 +157,7 @@ curl -s https://mcp.example.com/metrics
 
 ## 管理端 Web Console（M11）
 
-服务端（http 模式）启动后，浏览器访问 **`http://127.0.0.1:8890/admin/`** 即可进入管理端单页（登录 / 初始化、Dashboard、知识库、用户、异常、运维、个人中心六屏，离线静态页无构建/无 CDN）。
+服务启动后（无论 `stdio` 还是 `http` 模式），浏览器访问 **`http://127.0.0.1:8890/admin/`** 即可进入管理端单页（登录 / 初始化、Dashboard、知识库、用户、异常、运维、个人中心六屏，离线静态页无构建/无 CDN）。stdio 模式下管理端由后台线程附带 HTTP 服务，不依赖 `MCP_AUTH_TOKEN`。
 
 ### 初始化首个管理员
 

@@ -36,7 +36,7 @@
 ## M11 管理端（Web Console）
 
 ### 部署与运行
-- 管理端仅随 http 模式（`MCP_TRANSPORT=http`）提供；stdio 模式不挂载 `/admin/`，本地纯 MCP 客户端无此端点。
+- 管理端在 stdio 与 http 两种模式下均随进程提供（stdio 模式由后台线程附带 HTTP 服务，http 模式由主进程直接提供），监听 `HTTP_HOST:HTTP_PORT`（默认 `0.0.0.0:8890`）。
 - 管理端与 MCP 接口同端口同进程，无独立 TLS；仅限本机或可信内网，公网须前置 HTTPS 反代（见 deploy.md §3）。
 - `HTTP_HOST=0.0.0.0` 启动会打印明文安全告警；无证书加密，远程暴露风险高。
 

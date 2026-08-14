@@ -23,6 +23,8 @@ uv sync
 uv run littledotmcp
 ```
 
+stdio 模式在保持 MCP stdio 传输（供本地客户端接入）的同时，**会在后台额外起一个 HTTP 服务**，浏览器可直接访问管理端：`http://127.0.0.1:8890/admin/`（详见 §8）。该管理端以独立 Cookie Session 鉴权，不依赖 `MCP_AUTH_TOKEN`，故 stdio 模式无需配置该 Token。
+
 客户端配置（以 Claude Desktop / 兼容客户端为例）：
 
 ```json
@@ -146,9 +148,11 @@ M11 在 http 模式下随进程提供一套内嵌 Web 管理端（同端口、�
 
 ### 8.1 访问地址
 
-- 管理端入口：`http://127.0.0.1:8890/admin/`（即 http 监听端口 + `/admin/` 前缀）
+- 管理端入口：`http://127.0.0.1:8890/admin/`（即监听端口 + `/admin/` 前缀）
 - 管理 API：`/admin/api/*`（`login` / `logout` / `me` / `setup` / `documents` / `kb` / `users` / `errors` / `system/*`）
 - 静态资源：`/admin/static/*`
+
+> 无论 `MCP_TRANSPORT=stdio` 还是 `http`，管理端均在 `HTTP_HOST:HTTP_PORT`（默认 `0.0.0.0:8890`）提供：stdio 模式由后台线程附带，http 模式由主进程直接提供。
 
 ### 8.2 首次初始化管理员（二选一）
 
