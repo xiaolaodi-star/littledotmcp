@@ -48,6 +48,28 @@ export HTTP_PORT=8890
 uv run littledotmcp
 ```
 
+Windows（`cmd.exe`）等价写法（注意 `set` 后等号两侧**不要有空格**）：
+
+```bat
+set MCP_TRANSPORT=http
+set MCP_AUTH_TOKEN=请设置强随机Token
+set HTTP_HOST=0.0.0.0
+set HTTP_PORT=8890
+uv run littledotmcp
+```
+
+Windows（PowerShell）等价写法：
+
+```powershell
+$env:MCP_TRANSPORT="http"
+$env:MCP_AUTH_TOKEN="请设置强随机Token"
+$env:HTTP_HOST="0.0.0.0"
+$env:HTTP_PORT="8890"
+uv run littledotmcp
+```
+
+> 跨平台更省事的方案：把以上变量写进项目根目录的 `.env` 文件（形如 `MCP_TRANSPORT=http`），程序启动时会自动读取，无需按平台设置 `export` / `set`。
+
 远程客户端接入 JSON：
 
 ```json
@@ -165,6 +187,24 @@ export ADMIN_BOOTSTRAP_USER=admin
 export ADMIN_BOOTSTRAP_PASSWORD="强密码，勿用默认值"
 uv run littledotmcp
 ```
+
+Windows（`cmd.exe`）等价写法：
+
+```bat
+set ADMIN_BOOTSTRAP_USER=admin
+set ADMIN_BOOTSTRAP_PASSWORD=强密码，勿用默认值
+uv run littledotmcp
+```
+
+Windows（PowerShell）等价写法：
+
+```powershell
+$env:ADMIN_BOOTSTRAP_USER="admin"
+$env:ADMIN_BOOTSTRAP_PASSWORD="强密码，勿用默认值"
+uv run littledotmcp
+```
+
+> 也可直接把这两个变量写进 `.env` 文件，启动即自动生效。
 
 - 仅 `users` 表为空时生效；库非空则跳过并打印日志；
 - 建号后环境变量即完成使命，不设任何持久化默认口令；
