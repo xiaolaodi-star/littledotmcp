@@ -155,6 +155,32 @@ curl -s https://mcp.example.com/metrics
 
 > 管理权限复用 M6 共享 Token 的 local owner 语义：MCP 工具无法读取 HTTP 头，故以 `_current_owner()=="local"` 作为管理员判定，零新增鉴权模型。多用户 http 场景的细粒度管理员区分将在 M9 OAuth 落地后自然生效（L-015）。
 
+## 需求追溯链路（M8）
+
+`requirement_trace(code)` 一键聚合需求端到端追溯信息：SVN 提交（经 `requirement_id`）、关联文档、标签（`related_tag` + `EntityTag`）、所属项目/里程碑（扩展 B）、状态流转时间线。强制 owner 隔离，A/B 用户互不可见。
+
+- `svn_commit` 支持 `requirement_id` 入参，将提交关联到需求；
+- `requirement_add` 支持 `project_id` / `milestone_id` 入参（扩展 B，关联项目/里程碑）；
+- `requirement_link` 支持 `related_tag` / `related_commit` / `related_doc` 关联。
+
+## 企业微信文档后端（M9，骨架 + mock 冒烟）
+
+文档存储后端可切换：`doc_save` / `doc_read` 支持 `provider` 参数（`LOCAL` 默认 / `WECOM`）。
+
+- `provider="LOCAL"`（默认）：原文落本地存储，行为与既有完全一致，不触碰企微；
+- `provider="WECOM"`：经 `domains/doc/wecom.py` 的 `WeComDocClient` 写入/读取企微文档，`storage_key` 语义为企微 docid。
+
+可选配置（`config.py` / `.env`）：
+
+```bash
+# 企微文档后端（M9 骨架，未接真实网络）
+WECOM_CORP_ID=your_corp_id
+WECOM_AGENT_ID=your_agent_id
+WECOM_SECRET=your_secret
+```
+
+> 凭据缺失或企微接口失败时，`WeComDocClient` 返回可读降级结果，不会抛出未捕获异常（L-017）。真实联调前企微侧存取不可用，仅骨架与 mock 冒烟落地。
+
 ## 打包交付
 
 ```bash

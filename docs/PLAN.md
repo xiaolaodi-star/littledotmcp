@@ -411,47 +411,52 @@ littledotmcp 项目任务计划（WBS）
 
 ### M8 追溯链路（后续里程碑，依赖：M4）
 
-> 承接原 M4-08（已纳入本里程碑）：让"需求 ↔ SVN 提交 ↔ 文档 ↔ 标签 ↔ 项目/评估/上线"形成端到端可追溯闭环。
+> 承接原 M4-08（已纳入本里程碑）：让"需求 ↔ SVN 提交 ↔ 文档 ↔ 标签 ↔ 项目/里程碑 ↔ 状态流转"形成端到端可追溯闭环。**扩展 B（需求↔项目关联）已落地**：`Requirement` 增加 `project_id/milestone_id`，trace 跨到 project/milestone。
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M8-01 | requirement_trace 工具：聚合 SVN 提交/文档/标签/项目/评估/上线 | ⬜ |
-| M8-02 | SvnOpLog 补 requirement_id 列 + 幂等迁移；svn_commit 增加 requirement_id 入参 | ⬜ |
-| M8-03 | requirement_link 补 related_tag；trace 聚合文档/标签 | ⬜ |
+| M8-01 | requirement_trace 工具：聚合 SVN 提交/文档/标签/项目/里程碑/状态流转 | ✅ 2026-08-14 |
+| M8-02 | SvnOpLog 补 requirement_id 列 + 幂等迁移；svn_commit 增加 requirement_id 入参 | ✅ 2026-08-14 |
+| M8-03 | requirement_link 补 related_tag；trace 聚合文档/标签 | ✅ 2026-08-14 |
+| M8-扩展B | Requirement 增 project_id/milestone_id，requirement_add 支持入参，trace 跨项目/里程碑 | ✅ 2026-08-14 |
 
 **M8-01 requirement_trace 工具**
-- 说明：`domains/requirement/trace.py`：`build_trace(owner, code)` 聚合需求关联——SvnOpLog（按 requirement_id）、Document（related_doc）、EntityTag（related_tag）、项目/评估/上线记录，返回端到端追溯结构；注册 `requirement_trace(code)` 工具（OwnerScopedRepository 强制 owner 隔离）。
+- 说明：`domains/requirement/trace.py`：`build_trace(owner, code)` 聚合需求关联——SvnOpLog（按 requirement_id）、Document（related_doc）、related_tag 字段 + EntityTag（entity_type="requirement"）、Project/Milestone（project_id/milestone_id）、状态流转时间线，返回端到端追溯结构；注册 `requirement_trace(code)` 工具（OwnerScopedRepository 强制 owner 隔离）。
 - 验收标准：需求端到端追溯信息完整可查；A/B 用户互不可见。
 - 依赖：M4-03/05/06/07 + M8-02；规模：M；关键文件：`domains/requirement/trace.py`、`domains/requirement/tools.py`。
 
 **M8-02 svn 提交关联需求**
-- 说明：`db/models.py` 的 `SvnOpLog` 补 `requirement_id`（String(64) nullable + index）；`init_db` 幂等迁移（既有库 ALTER 幂等）；`svn_commit` 增加 `requirement_id` 入参落库。
+- 说明：`db/models.py` 的 `SvnOpLog` 补 `requirement_id`（String(64) nullable + index）；`init_db` 末尾幂等 ALTER（捕获"duplicate column"忽略，兼容存量 SQLite 库）；`svn_commit` 增加 `requirement_id` 入参经 `_make_on_op` 落库。
 - 验收标准：svn_commit 带需求关联后可在 requirement_trace 中体现；既有库升级无副作用。
-- 依赖：M4-03 + M1-03；规模：S；关键文件：`db/models.py`、`domains/svn/tools.py`。
+- 依赖：M4-03 + M1-03；规模：S；关键文件：`db/models.py`、`domains/svn/tools.py`、`scripts/init_db.py`。
 
 **M8-03 文档/标签聚合**
-- 说明：`requirement_link` 现有 `related_commit/related_doc`，补 `related_tag`；`build_trace` 聚合 doc_relations 与 entity_tags（M4-07 多态标签）。
+- 说明：`requirement_link` 现有 `related_commit/related_doc`，补 `related_tag`（逗号分隔 tag_id）；`build_trace` 聚合 Document（related_doc）与 Tag（related_tag + EntityTag）。
 - 验收标准：trace 输出含文档与标签聚合，与 requirement_link 写入一致。
 - 依赖：M8-01 + M4-07；规模：S；关键文件：`domains/requirement/tools.py`。
 
-### M9 企业微信集成（后续里程碑，依赖：M3）
+**M8 扩展 B（需求↔项目关联，用户确认选 B）**
+- 说明：`Requirement` 增加 `project_id/milestone_id`（String(64) nullable + index，含幂等迁移）；`requirement_add` 支持可选 `project_id/milestone_id` 入参；`build_trace` 经两 id 关联 Project/Milestone，使追溯树覆盖"需求 → 项目/里程碑 → 上线"。
+- 验收标准：带 project/milestone 的需求可在 trace 中回显项目名/里程碑状态；owner 隔离保持。
 
-> 承接原 M3-03（⏸ 延后）：实现企微文档 API 客户端骨架与 doc 域 provider 切换（`documents.provider` 字段已就绪）。
+### M9 企业微信集成（已完成 ✅ 2026-08-14，依赖：M3）
+
+> 承接原 M3-03（⏸ 延后）：实现企微文档 API 客户端骨架与 doc 域 provider 切换（`documents.provider` 字段已就绪）。按计划为**骨架 + mock 冒烟**，不接真实企微网络。
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| M9-01 | 企微文档 API 客户端骨架：WeComDocClient（token 缓存、读写抽象） | ⬜ |
-| M9-02 | doc 域 provider 切换：LOCAL/WECOM，doc 工具支持 provider 参数 | ⬜ |
+| M9-01 | 企微文档 API 客户端骨架：WeComDocClient（token 缓存、读写抽象、降级） | ✅ 2026-08-14 |
+| M9-02 | doc 域 provider 切换：LOCAL/WECOM，doc 工具支持 provider 参数 | ✅ 2026-08-14 |
 
 **M9-01 企微文档 API 客户端骨架**
-- 说明：`domains/doc/wecom.py`：`WeComDocClient`（corpid/agentid/secret 注入、token 获取与缓存、文档列表/读取/写入抽象）；未配置凭据时返回明确降级提示；mock API 冒烟通过；失败不崩溃。
+- 说明：`domains/doc/wecom.py`：`WeComDocClient`（corpid/agentid/secret 注入、token 获取与缓存、文档 list/read/write 抽象）；凭据缺失或网络/接口失败时统一返回可读降级结果（不抛未捕获异常）；httpx 同步客户端，mock API 冒烟通过。
 - 验收标准：凭据缺失时报可读错误；mock API 冒烟通过；失败不崩溃。
 - 依赖：M3-02 + `httpx`（M7 已引入）；规模：L；关键文件：`domains/doc/wecom.py`。
 
 **M9-02 doc 域 provider 切换**
-- 说明：`documents` 表 provider 字段已存在（LOCAL/WECOM，默认 LOCAL）；`doc_save/doc_read` 支持 provider 参数，企微分支调用 WeComDocClient；LOCAL 主链不破坏。
+- 说明：`documents` 表 provider 字段已存在（LOCAL/WECOM，默认 LOCAL）；`doc_save/doc_read` 支持 provider 参数，WECOM 分支调用 WeComDocClient（storage_key 语义调整为企微 docid），LOCAL 主链完全不变；owner 隔离保持。
 - 验收标准：provider 切换不破坏 LOCAL 主链；企微分支 mock 可跑通；owner 隔离保持。
-- 依赖：M9-01 + M3-04；规模：M；关键文件：`domains/doc/tools.py`、`domains/doc/storage.py`。
+- 依赖：M9-01 + M3-04；规模：M；关键文件：`domains/doc/tools.py`、`domains/doc/wecom.py`。
 
 ### M10 服务运维管理（依赖：M6/M7，已完成 ✅ 2026-08-14）
 
@@ -581,11 +586,12 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M6-05 | 空知识库初始化 | M6-04/M1-03 | ✅ | 2026-08-14 |
 | M6-06 | 使用文档与许可 | M6-05 | ✅ | 2026-08-14 |
 | M6-07 | 端到端验收 | M6-01~06 | ✅ | 2026-08-14 |
-| M8-01 | requirement_trace 工具 | M4-03/05/06/07 | ⬜ | 待执行 |
-| M8-02 | svn 提交关联需求 | M4-03/M1-03 | ⬜ | 待执行 |
-| M8-03 | 文档/标签聚合 | M8-01/M4-07 | ⬜ | 待执行 |
-| M9-01 | 企微文档客户端骨架 | M3-02 | ⬜ | 延后里程碑 |
-| M9-02 | doc provider 切换 | M9-01/M3-04 | ⬜ | 延后里程碑 |
+| M8-01 | requirement_trace 工具 | M4-03/05/06/07 | ✅ | 2026-08-14 |
+| M8-02 | svn 提交关联需求 | M4-03/M1-03 | ✅ | 2026-08-14 |
+| M8-03 | 文档/标签聚合 | M8-01/M4-07 | ✅ | 2026-08-14 |
+| M8-扩展B | 需求↔项目关联 | M4-03/05 | ✅ | 2026-08-14 |
+| M9-01 | 企微文档客户端骨架 | M3-02 | ✅ | 2026-08-14 |
+| M9-02 | doc provider 切换 | M9-01/M3-04 | ✅ | 2026-08-14 |
 | M10-01 | 指标端点 + 配置诊断 | M6-01/M7 | ✅ | 2026-08-14 |
 | M10-02 | 工具清单 + 数据量统计 | M1-04 | ✅ | 2026-08-14 |
 | M10-03 | 重置工具 + 管理权限 | M6-02/M3-05 | ✅ | 2026-08-14 |

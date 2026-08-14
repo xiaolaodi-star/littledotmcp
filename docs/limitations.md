@@ -26,3 +26,5 @@
 | L-014 | M7 | Embedding 缓存为追加式 JSONL（`data/embedding_cache.jsonl`），无过期/淘汰策略；维度以首探结果为准 | 缓存文件随时间增长；换模型后旧向量缓存不再命中 | 命中率可经 EmbeddingCache.hits/misses 观察；reset_data 一键清理；换模型/维度建议重置 |
 | L-015 | M10 | 管理权限基于 M6 local owner 软隔离（`_current_owner()=="local"` 即管理员），非独立鉴权模型 | stdio 单人模式天然为 local 全权；http 模式未配 OAuth 前共享 Token 即 local，无法区分多用户管理员 | 越权风险仅在多用户 http 场景；M9 OAuth 落地后按 user.id 区分，普通用户 Token owner≠local 自动被拒（ADR-15） |
 | L-016 | M10 | `/metrics` 仅暴露非敏感聚合指标（进程 uptime、Embedding 缓存命中率/次数、embed 调用次数、服务版本），不含密钥/用户数据/逐请求明细 | 排障粒度限于进程级聚合 | 需要逐请求明细时结合日志；敏感信息不进指标端点 |
+| L-017 | M9 | 企微集成仅为客户端骨架 + mock 冒烟，未接入真实企微网络/接口路径（token 接口为真实 URL，文档 list/read/write 接口为占位 URL） | 企微侧存取在真实联调前不可用 | 凭据缺失/失败已可读降级；真实联调时替换 `_DOC_*` 占位 URL 并补充字段映射 |
+| L-018 | M8 | 扩展字段（`Requirement.project_id/milestone_id/related_tag`、`SvnOpLog.requirement_id`）经幂等 ALTER 迁移；related_tag 为逗号分隔 tag_id 字符串，非独立关联表 | 标签聚合依赖字符串解析一致性；存量库需执行 init_db 迁移新列 | 迁移幂等（忽略 duplicate column）；标签经 EntityTag 多态与 related_tag 双通道聚合 |

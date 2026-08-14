@@ -173,20 +173,24 @@ def svn_update(repo_id: str, local_path: str = "") -> dict:
         return fail(message=f"更新失败：{exc}")
 
 
-@mcp.tool(name="svn_commit", description="提交本地改动，message 必填，并写入操作日志。")
-def svn_commit(repo_id: str, message: str, local_path: str = "") -> dict:
+@mcp.tool(
+    name="svn_commit",
+    description="提交本地改动，message 必填，并写入操作日志；可选 requirement_id 关联需求（M8 追溯）。",
+)
+def svn_commit(repo_id: str, message: str, local_path: str = "", requirement_id: str = "") -> dict:
     owner = _current_owner()
     try:
         message = (message or "").strip()
         if not message:
             return fail(message="commit message 必填")
+        req_id = (requirement_id or "").strip()
         path = _resolve_local_path(owner, repo_id, local_path)
         with db_engine.SessionLocal() as session:
             if SvnRepoRepository(session).get_by_owner(owner, repo_id) is None:
                 return fail(message="仓库不存在")
-            client = get_svn_client(repo_id, on_op=_make_on_op(owner, repo_id))
+            client = get_svn_client(repo_id, on_op=_make_on_op(owner, repo_id, req_id))
             rev = client.commit(Path(path), message)
-        return ok(data={"repo_id": repo_id, "rev": rev}, message="提交成功")
+        return ok(data={"repo_id": repo_id, "rev": rev, "requirement_id": req_id}, message="提交成功")
     except ValueError as exc:
         return fail(message=str(exc))
     except Exception as exc:
@@ -228,7 +232,7 @@ def _resolve_local_path(owner: str, repo_id: str, local_path: str) -> Path:
     return base
 
 
-def _make_on_op(owner: str, repo_id: str) -> callable:
+def _make_on_op(owner: str, repo_id: str, requirement_id: str = "") -> callable:
     """返回写入 SvnOpLog 的回调（在 db 会话外收集，tools 内已开会话提交）。"""
 
     def _on_op(op: str, rev: str, message: str) -> None:
@@ -242,6 +246,7 @@ def _make_on_op(owner: str, repo_id: str) -> callable:
                     op=op,
                     rev=rev,
                     message=message,
+                    requirement_id=requirement_id or None,
                 )
             )
             session.commit()

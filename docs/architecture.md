@@ -98,17 +98,19 @@
   （入库/检索/向量库一致）；`kb_ask`（M7-03）复用 `kb_search` 检索 Top-K
   片段 → `_call_llm_answer`（openai SDK 调 `llm_*`）生成带
   `【来源：标题#seq】` 引用的回答，无 LLM Key 降级返回检索片段并提示。
-- **ADR-13 追溯链路（M8，规划中，落地于后续里程碑）**：承接原 M4-08，
+- **ADR-13 追溯链路（M8，✅ 2026-08-14 已落地）**：承接原 M4-08，
   `domains/requirement/trace.py` 的 `build_trace(owner, code)` 聚合需求关联——
-  `SvnOpLog.requirement_id`（M8-02 补列 + `svn_commit` 入参，幂等迁移）、
+  `SvnOpLog.requirement_id`（M8-02 补列 + `svn_commit` 入参，幂等 ALTER 迁移）、
   `Requirement.related_doc/related_commit/related_tag`（M8-03 补）、`EntityTag`
-  多态标签（M4-07）；`requirement_trace(code)` 注册为 MCP 工具，owner 隔离经
-  `OwnerScopedRepository` 强制。
-- **ADR-14 doc 域企微后端（M9，规划中，延后里程碑）**：承接原 M3-03，
+  多态标签（M4-07）；**扩展 B（需求↔项目关联）**：`Requirement.project_id/
+  milestone_id` 补列 + `requirement_add` 入参，trace 跨 `Project/Milestone`；
+  `requirement_trace(code)` 注册为 MCP 工具，owner 隔离经 `OwnerScopedRepository` 强制。
+- **ADR-14 doc 域企微后端（M9，✅ 2026-08-14 已落地）**：承接原 M3-03，
   `domains/doc/wecom.py` 的 `WeComDocClient`（corpid/agentid/secret 注入、
-  token 获取与缓存、文档读写抽象，httpx）；`documents.provider` 字段已就绪
-  （LOCAL/WECOM，默认 LOCAL），M9-02 起 `doc_save/doc_read` 支持 provider
-  参数按后端路由；LOCAL 主链不破坏，未配置凭据时降级提示。
+  token 获取与缓存、文档 list/read/write 抽象，httpx；凭据缺失/失败统一降级、不崩溃）；
+  `documents.provider` 字段已就绪（LOCAL/WECOM，默认 LOCAL），M9-02 起 `doc_save/doc_read`
+  支持 provider 参数按后端路由（WECOM 分支 storage_key 为企微 docid）；LOCAL 主链不破坏，
+  未配置凭据时降级提示。按 M9 计划为骨架 + mock 冒烟，未接真实企微网络。
 - **ADR-15 服务运维管理（M10，✅ 2026-08-14 已落地）**：承接 M6 远程部署与 M7
   真实 Embedding 的运维诉求，`server.py` 新增 `custom_route("/metrics")`
   暴露 Prometheus 文本指标（进程 uptime、Embedding 缓存命中/未命中/命中率、

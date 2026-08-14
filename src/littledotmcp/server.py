@@ -97,6 +97,7 @@ def register_tools() -> None:
     from .domains.mindmap import tools as mindmap_tools  # noqa: F401  (注册 mindmap_* 工具)
     from .domains.project import tools as proj_tools  # noqa: F401  (注册 project_* 工具)
     from .domains.requirement import tools as req_tools  # noqa: F401  (注册 requirement_* 工具)
+    from .domains.requirement import trace as req_trace  # noqa: F401  (注册 requirement_trace 工具)
     from .domains.sql_er import tools as sql_er_tools  # noqa: F401  (注册 sql_er_from_ddl)
     from .domains.sql_validate import (
         tools as sql_validate_tools,  # noqa: F401  (注册 sql_validate_script)

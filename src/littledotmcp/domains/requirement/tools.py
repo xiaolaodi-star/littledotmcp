@@ -63,6 +63,9 @@ def _req_to_dict(req: Requirement) -> dict:
         "detail": req.detail,
         "related_commit": req.related_commit,
         "related_doc": req.related_doc,
+        "related_tag": req.related_tag,
+        "project_id": req.project_id,
+        "milestone_id": req.milestone_id,
         "created_at": req.created_at.isoformat() if req.created_at else "",
         "updated_at": req.updated_at.isoformat() if req.updated_at else "",
     }
@@ -83,9 +86,18 @@ def _summarize(text: str) -> str:
 
 @mcp.tool(
     name="requirement_add",
-    description="新增需求：code 唯一（同用户），title 必填，status 默认 DRAFT。",
+    description=(
+        "新增需求：code 唯一（同用户），title 必填，status 默认 DRAFT。"
+        "可选 project_id/milestone_id 关联项目（M8 扩展 B）。"
+    ),
 )
-def requirement_add(code: str, title: str, detail: str = "") -> dict:
+def requirement_add(
+    code: str,
+    title: str,
+    detail: str = "",
+    project_id: str = "",
+    milestone_id: str = "",
+) -> dict:
     owner = _current_owner()
     try:
         code = (code or "").strip()
@@ -94,6 +106,8 @@ def requirement_add(code: str, title: str, detail: str = "") -> dict:
             return fail(message="code 与 title 必填")
         if len(code) > 64 or len(title) > 255:
             return fail(message="code/title 超长")
+        proj_id = (project_id or "").strip() or None
+        ms_id = (milestone_id or "").strip() or None
         with db_engine.SessionLocal() as session:
             repo = RequirementRepository(session)
             if repo.get_by_code(owner, code) is not None:
@@ -105,6 +119,8 @@ def requirement_add(code: str, title: str, detail: str = "") -> dict:
                 title=title,
                 status="DRAFT",
                 detail=detail or "",
+                project_id=proj_id,
+                milestone_id=ms_id,
             )
             try:
                 repo.add(req)
@@ -229,9 +245,14 @@ def requirement_remove(code: str) -> dict:
 
 @mcp.tool(
     name="requirement_link",
-    description="关联需求与代码提交 / 文档：related_commit 或 related_doc 可选，至少其一。",
+    description="关联需求与代码提交 / 文档 / 标签：related_commit、related_doc、related_tag 可选，至少其一。",
 )
-def requirement_link(code: str, related_commit: str = "", related_doc: str = "") -> dict:
+def requirement_link(
+    code: str,
+    related_commit: str = "",
+    related_doc: str = "",
+    related_tag: str = "",
+) -> dict:
     owner = _current_owner()
     try:
         code = (code or "").strip()
@@ -239,8 +260,9 @@ def requirement_link(code: str, related_commit: str = "", related_doc: str = "")
             return fail(message="code 必填")
         related_commit = (related_commit or "").strip()
         related_doc = (related_doc or "").strip()
-        if not related_commit and not related_doc:
-            return fail(message="related_commit 与 related_doc 至少提供一个")
+        related_tag = (related_tag or "").strip()
+        if not related_commit and not related_doc and not related_tag:
+            return fail(message="related_commit / related_doc / related_tag 至少提供一个")
         with db_engine.SessionLocal() as session:
             repo = RequirementRepository(session)
             req = repo.get_by_code(owner, code)
@@ -254,6 +276,8 @@ def requirement_link(code: str, related_commit: str = "", related_doc: str = "")
                 req.related_commit = (req.related_commit + "," + related_commit).strip(",")
             if related_doc:
                 req.related_doc = related_doc
+            if related_tag:
+                req.related_tag = (req.related_tag + "," + related_tag).strip(",")
             session.commit()
             logger.info("requirement_link 完成 code=%s", code)
             data = _req_to_dict(req)

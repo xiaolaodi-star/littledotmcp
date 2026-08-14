@@ -103,6 +103,7 @@ class SvnOpLog(Base):
     op: Mapped[str] = mapped_column(String(32))
     rev: Mapped[str | None] = mapped_column(String(64), nullable=True)
     message: Mapped[str] = mapped_column(Text, default="")
+    requirement_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # M8 追溯链路
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.now(dt.timezone.utc))
 
 
@@ -152,6 +153,9 @@ class Requirement(Base):
     detail: Mapped[str] = mapped_column(Text, default="")
     related_commit: Mapped[str] = mapped_column(String(255), default="")
     related_doc: Mapped[str] = mapped_column(String(255), default="")
+    related_tag: Mapped[str] = mapped_column(String(255), default="")  # M8 标签关联（逗号分隔 tag_id）
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # M8 扩展 B
+    milestone_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)  # M8 扩展 B
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.now(dt.timezone.utc))
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=dt.datetime.now(dt.timezone.utc), onupdate=dt.datetime.now(dt.timezone.utc)
