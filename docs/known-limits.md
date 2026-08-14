@@ -32,3 +32,19 @@
 ### 渲染
 - Mermaid `erDiagram` 不支持列内联注释，列注释以行尾 `//` 备注呈现。
 - 表名 / 列名含非字母数字下划线字符时，Mermaid 标识符会被归一为下划线（渲染层处理，不影响结构化数据）。
+
+## M11 管理端（Web Console）
+
+### 部署与运行
+- 管理端仅随 http 模式（`MCP_TRANSPORT=http`）提供；stdio 模式不挂载 `/admin/`，本地纯 MCP 客户端无此端点。
+- 管理端与 MCP 接口同端口同进程，无独立 TLS；仅限本机或可信内网，公网须前置 HTTPS 反代（见 deploy.md §3）。
+- `HTTP_HOST=0.0.0.0` 启动会打印明文安全告警；无证书加密，远程暴露风险高。
+
+### 初始化与账户
+- 首个管理员仅两种途径：① 启动前设一次性 `ADMIN_BOOTSTRAP_USER/PASSWORD` 空库自动建；② 空库时浏览器 `/admin/api/setup` 表单。库非空后两种方式均失效，杜绝默认口令。
+- 管理端登录态（`user_sessions` + Cookie `littledot_session`）与 MCP 用户 Token（`users.token`）完全分离，互不可代用。
+- 普通用户由 admin 在管理端创建，默认 `role=user`，按 `owner_id` 隔离；越权访问返回 403。
+
+### 能力边界
+- 管理端面向业务运维视图，不暴露 MCP 工具调用；MCP 客户端能力不受管理端权限影响。
+- 会话默认 12h（`ADMIN_SESSION_HOURS` 可调），超时需重新登录。
