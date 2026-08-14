@@ -48,7 +48,7 @@
   多用户阶段升级 MCP OAuth 2.1。
 - **ADR-7 doc 域（M3-01~04 落地）**：`DocStorage` 抽象 + `LocalDocStorage`（UUID
   storage_key、防路径穿越、owner 分目录）；元数据落 `documents` 表经
-  `OwnerScopedRepository` 强制隔离；provider 恒 LOCAL（企微后端随 M3-03 延后）；
+  `OwnerScopedRepository` 强制隔离；provider 恒 LOCAL（企微后端随 M3-03 延后至 M9，见 ADR-14）；
   解析器 `rag/parsers` 按扩展名路由 txt/md/pdf/docx，损坏文件可读报错。
 - **ADR-8 kb 域 RAG（M3-05~09 落地，M7 补真实后端）**：RAG 链路
   采用"抽象隔离 + 离线 Fake 验收"：`rag/chunker`（中文分句 + token 预算 +
@@ -66,7 +66,7 @@
   svn CLI，凭据加解密用标准库实现）；requirement 域实现状态枚举
   DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED 与 LLM 降级评估；project 域实现
   项目/里程碑/任务三级仓储，`project_remove` 手动级联删除（SQLite 默认不启用
-  外键）；tag 域 tags+entity_tags 多态。M4-08 追溯链路待细化。
+  外键）；tag 域 tags+entity_tags 多态。M4-08 追溯链路已纳入 M8（见 ADR-13）。
 - **ADR-10 mindmap/standard 域（M5，2026-08-13 落地）**：mindmap 域
   `model.py` 维护 `MindNode` 树与 Mermaid mindmap 文本双向转换（支持
   `id((...))` 形状、唯一根、缩进层级校验），`export.py` 树→OPML（XML 转义），
@@ -98,5 +98,16 @@
   （入库/检索/向量库一致）；`kb_ask`（M7-03）复用 `kb_search` 检索 Top-K
   片段 → `_call_llm_answer`（openai SDK 调 `llm_*`）生成带
   `【来源：标题#seq】` 引用的回答，无 LLM Key 降级返回检索片段并提示。
+- **ADR-13 追溯链路（M8，规划中，落地于后续里程碑）**：承接原 M4-08，
+  `domains/requirement/trace.py` 的 `build_trace(owner, code)` 聚合需求关联——
+  `SvnOpLog.requirement_id`（M8-02 补列 + `svn_commit` 入参，幂等迁移）、
+  `Requirement.related_doc/related_commit/related_tag`（M8-03 补）、`EntityTag`
+  多态标签（M4-07）；`requirement_trace(code)` 注册为 MCP 工具，owner 隔离经
+  `OwnerScopedRepository` 强制。
+- **ADR-14 doc 域企微后端（M9，规划中，延后里程碑）**：承接原 M3-03，
+  `domains/doc/wecom.py` 的 `WeComDocClient`（corpid/agentid/secret 注入、
+  token 获取与缓存、文档读写抽象，httpx）；`documents.provider` 字段已就绪
+  （LOCAL/WECOM，默认 LOCAL），M9-02 起 `doc_save/doc_read` 支持 provider
+  参数按后端路由；LOCAL 主链不破坏，未配置凭据时降级提示。
 
 > 本文件随里程碑落地持续回写；详细任务见 [PLAN.md](PLAN.md)。

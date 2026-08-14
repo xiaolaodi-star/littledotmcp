@@ -210,7 +210,7 @@ littledotmcp 项目任务计划（WBS）
 |------|------|------|
 | M3-01 | 文档解析器集合：txt/md/pdf/docx → 纯文本 | ✅ 2026-08-12 |
 | M3-02 | DocStorage 抽象 + 本地实现（防穿越） | ✅ 2026-08-12 |
-| M3-03 | 企业微信实现：微盘/文档 API 客户端骨架 | ⏸ 延后至后续里程碑 |
+| M3-03 | 企业微信实现：微盘/文档 API 客户端骨架 | ⏸ 延后至 M9 |
 | M3-04 | doc 域工具：doc_save/read/search/list/delete | ✅ 2026-08-12 |
 | M3-05 | 切块器：中文感知、500~800 token、10% 重叠 | ✅ 2026-08-13 |
 | M3-06 | Embedding 抽象：FakeEmbedder 离线验收；真实 OpenAI/Ollama 后端 | ✅ 2026-08-13（真实后端剥离 M7） |
@@ -229,13 +229,13 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：save/load/delete 测试通过；穿越路径被拒；owner 目录隔离。
 - 依赖：M1-04；规模：M；关键文件：`domains/doc/storage.py`。
 
-**M3-03 企业微信实现（⏸ 延后至后续里程碑）**
+**M3-03 企业微信实现（⏸ 延后至 M9，见 M9 章节）**
 - 说明：`domains/doc/wecom.py`：企微微盘/文档 API 客户端骨架（corpid/agentid/secret 注入、token 缓存、上传/下载/删除）；未配置凭据时返回明确降级提示；备选"仅企微机器人通知"模式。
 - 验收标准：凭据缺失时报可读错误；mock API 冒烟通过；失败不崩溃。
 - 依赖：M3-02；规模：L；关键文件：`domains/doc/wecom.py`。
 
 **M3-04 doc 域工具**
-- 说明：`doc_save/doc_read/doc_search/doc_list/doc_delete`（provider 恒 LOCAL，企微切换随 M3-03 延后）；元数据落 `documents` 表（OwnerScopedRepository 强制 owner 隔离）；搜索走 name 模糊 + mime 过滤。
+- 说明：`doc_save/doc_read/doc_search/doc_list/doc_delete`（provider 恒 LOCAL，企微切换随 M3-03 延后至 M9）；元数据落 `documents` 表（OwnerScopedRepository 强制 owner 隔离）；搜索走 name 模糊 + mime 过滤。
 - 验收标准：全链路 CRUD 测试；A/B 用户数据互不可见；搜索过滤正确。
 - 依赖：M3-02 + M1-04；规模：M；关键文件：`domains/doc/tools.py`。
 
@@ -281,11 +281,11 @@ littledotmcp 项目任务计划（WBS）
 | M4-01 | svn CLI 封装：安全调用、超时、输出解析、异常映射 | ✅ 2026-08-13（LocalFakeSvnClient 简化版） |
 | M4-02 | 凭据管理：加密存储、keyring 抽象、脱敏 | ✅ 2026-08-13 |
 | M4-03 | svn 域工具：checkout/update/commit/log/diff/blame/status | ✅ 2026-08-13（模拟实现） |
-| M4-04 | 需求状态机：DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED + 流转规则 | ✅ 2026-08-13（状态枚举+工具，严格流转规则待细化） |
+| M4-04 | 需求状态机：DRAFT/ASSESS/DEV/ONLINE/DONE/CLOSED + 流转规则 | ✅ 2026-08-13（流转字典落地 tools.py） |
 | M4-05 | 评估与上线流程：影响面报告、上线检查清单 | ✅ 2026-08-13（LLM 评估降级） |
-| M4-06 | 项目/里程碑/任务：进度自动计算与汇报 | ✅ 2026-08-13（手动级联删除，进度自动计算待细化） |
+| M4-06 | 项目/里程碑/任务：进度自动计算与汇报 | ✅ 2026-08-13（进度统计随 project_get 落地） |
 | M4-07 | 跨实体标签：tags + entity_tags 多态、tag_* 工具 | ✅ 2026-08-13 |
-| M4-08 | 追溯链路：需求↔SVN 提交↔文档↔标签 | ⬜ 待细化 |
+| M4-08 | 追溯链路：需求↔SVN 提交↔文档↔标签 | ⬜ 纳入 M8 追溯链路 |
 
 **M4-01 svn CLI 封装**
 - 说明：`domains/svn/client.py`：`SvnClient`（subprocess 参数列表化传参防注入、超时、错误码→异常映射、`--xml` 输出解析）；检测 svn 可执行文件并给出安装提示。
@@ -303,9 +303,9 @@ littledotmcp 项目任务计划（WBS）
 - 依赖：M4-01/02；规模：M；关键文件：`domains/svn/tools.py`。
 
 **M4-04 需求状态机**
-- 说明：`domains/requirement/state_machine.py`：状态与合法流转（DRAFT→ASSESS→DEV→ONLINE→DONE→CLOSED，含退回），非法流转拒绝并审计；状态变更时间戳记录。
+- 说明：`domains/requirement/tools.py`：`REQ_STATUSES` + `_REQ_TRANSITIONS`（DRAFT→ASSESS→DEV→ONLINE→DONE/CLOSED，含原状态自留），非法流转拒绝并审计；状态变更时间戳记录。
 - 验收标准：非法流转被拒；合法链全通过；变更可追溯。
-- 依赖：M1-04；规模：M；关键文件：`domains/requirement/state_machine.py`。
+- 依赖：M1-04；规模：M；关键文件：`domains/requirement/tools.py`。
 
 **M4-05 评估与上线流程**
 - 说明：`requirement_assess`（LLM 辅助生成影响面报告：涉及表/文档/风险，落库）；`requirement_start_dev`；`requirement_launch`（上线检查清单：关联 SQL 已校验（调 M2）、代码已提交（查 svn_ops_log）、文档已更新；缺项给出阻断提示）。
@@ -313,9 +313,9 @@ littledotmcp 项目任务计划（WBS）
 - 依赖：M4-04 + M2-07 + M4-03；规模：L；关键文件：`domains/requirement/tools.py`。
 
 **M4-06 项目进度**
-- 说明：`project_create/update`、`milestone_create`、`task_create/update`（含状态/权重）；进度=完成权重/总权重自动计算；`project_progress_report`（文本，可选 `[skill:xlsx]` 导出 Excel）。
-- 验收标准：进度计算正确（含权重、无里程碑边界）；报告生成可用。
-- 依赖：M1-04；规模：M；关键文件：`domains/project/*.py`。
+- 说明：`project_add/list/get/remove`、`milestone_add/list`、`task_add/list/update/remove`（含状态/权重）；`project_get` 内 `_progress(tasks)` 按完成权重/总权重自动计算进度；`project_remove` 手动级联删除里程碑与任务。
+- 验收标准：进度计算正确（含权重、无里程碑边界）；详情返回进度统计。
+- 依赖：M1-04；规模：M；关键文件：`domains/project/tools.py`。
 
 **M4-07 跨实体标签**
 - 说明：`tags` + `entity_tags`（entity_type/entity_id 多态）；`tag_create/rename/apply/remove/query`（按标签聚合查询，跨 entity_type）；owner 隔离。
@@ -409,6 +409,50 @@ littledotmcp 项目任务计划（WBS）
 - 验收标准：验收清单全绿；遗留问题登记并纳入下一迭代。
 - 依赖：M6-01~06 全部；规模：L；关键文件：`docs/acceptance.md`。
 
+### M8 追溯链路（后续里程碑，依赖：M4）
+
+> 承接原 M4-08（已纳入本里程碑）：让"需求 ↔ SVN 提交 ↔ 文档 ↔ 标签 ↔ 项目/评估/上线"形成端到端可追溯闭环。
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| M8-01 | requirement_trace 工具：聚合 SVN 提交/文档/标签/项目/评估/上线 | ⬜ |
+| M8-02 | SvnOpLog 补 requirement_id 列 + 幂等迁移；svn_commit 增加 requirement_id 入参 | ⬜ |
+| M8-03 | requirement_link 补 related_tag；trace 聚合文档/标签 | ⬜ |
+
+**M8-01 requirement_trace 工具**
+- 说明：`domains/requirement/trace.py`：`build_trace(owner, code)` 聚合需求关联——SvnOpLog（按 requirement_id）、Document（related_doc）、EntityTag（related_tag）、项目/评估/上线记录，返回端到端追溯结构；注册 `requirement_trace(code)` 工具（OwnerScopedRepository 强制 owner 隔离）。
+- 验收标准：需求端到端追溯信息完整可查；A/B 用户互不可见。
+- 依赖：M4-03/05/06/07 + M8-02；规模：M；关键文件：`domains/requirement/trace.py`、`domains/requirement/tools.py`。
+
+**M8-02 svn 提交关联需求**
+- 说明：`db/models.py` 的 `SvnOpLog` 补 `requirement_id`（String(64) nullable + index）；`init_db` 幂等迁移（既有库 ALTER 幂等）；`svn_commit` 增加 `requirement_id` 入参落库。
+- 验收标准：svn_commit 带需求关联后可在 requirement_trace 中体现；既有库升级无副作用。
+- 依赖：M4-03 + M1-03；规模：S；关键文件：`db/models.py`、`domains/svn/tools.py`。
+
+**M8-03 文档/标签聚合**
+- 说明：`requirement_link` 现有 `related_commit/related_doc`，补 `related_tag`；`build_trace` 聚合 doc_relations 与 entity_tags（M4-07 多态标签）。
+- 验收标准：trace 输出含文档与标签聚合，与 requirement_link 写入一致。
+- 依赖：M8-01 + M4-07；规模：S；关键文件：`domains/requirement/tools.py`。
+
+### M9 企业微信集成（后续里程碑，依赖：M3）
+
+> 承接原 M3-03（⏸ 延后）：实现企微文档 API 客户端骨架与 doc 域 provider 切换（`documents.provider` 字段已就绪）。
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| M9-01 | 企微文档 API 客户端骨架：WeComDocClient（token 缓存、读写抽象） | ⬜ |
+| M9-02 | doc 域 provider 切换：LOCAL/WECOM，doc 工具支持 provider 参数 | ⬜ |
+
+**M9-01 企微文档 API 客户端骨架**
+- 说明：`domains/doc/wecom.py`：`WeComDocClient`（corpid/agentid/secret 注入、token 获取与缓存、文档列表/读取/写入抽象）；未配置凭据时返回明确降级提示；mock API 冒烟通过；失败不崩溃。
+- 验收标准：凭据缺失时报可读错误；mock API 冒烟通过；失败不崩溃。
+- 依赖：M3-02 + `httpx`（M7 已引入）；规模：L；关键文件：`domains/doc/wecom.py`。
+
+**M9-02 doc 域 provider 切换**
+- 说明：`documents` 表 provider 字段已存在（LOCAL/WECOM，默认 LOCAL）；`doc_save/doc_read` 支持 provider 参数，企微分支调用 WeComDocClient；LOCAL 主链不破坏。
+- 验收标准：provider 切换不破坏 LOCAL 主链；企微分支 mock 可跑通；owner 隔离保持。
+- 依赖：M9-01 + M3-04；规模：M；关键文件：`domains/doc/tools.py`、`domains/doc/storage.py`。
+
 ---
 
 ## 4. 横切任务（贯穿各里程碑）
@@ -434,11 +478,15 @@ M2: M2-01 → M2-02 → M2-03、M2-04 → M2-06/M2-07；M2-05（依赖 02）；M
 M3: M3-01 → M3-05 → M3-06 → M3-07 → M3-08 → M3-09
     M3-02 → M3-03 → M3-04；M3-08 依赖 M3-04
 M7: M3-06/08（真实 Embedding 后端 + kb_ask）✅
+M8: M8-02（SvnOpLog 补列+svn_commit 关联）→ M8-01（trace 工具）；M8-03（依赖 01+07）
+    M8 依赖：M4-03/05/06/07（追溯聚合数据源）
+M9: M9-01（企微客户端骨架）→ M9-02（doc provider 切换）
+    M9 依赖：M3-02（DocStorage 抽象）+ M3-04（doc 工具）
 M4: M4-01 → M4-02 → M4-03；M4-04 → M4-05；M4-06（依赖 04）；M4-07（独立）
-    M4-08（依赖 03/05/06/07）
+    M4-08（依赖 03/05/06/07，落地于 M8）
 M5: M5-01 → M5-02 → M5-03；M5-04 → M5-05
 M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部）
-里程碑建议顺序：M0 → M1 → M2 ‖ M3 ‖ M4 ‖ M5 → M6（M2~M5 可并行）
+里程碑建议顺序：M0 → M1 → M2 ‖ M3 ‖ M4 ‖ M5 → M6 → M8 → M9（M2~M5 可并行）
 ```
 
 ---
@@ -473,7 +521,7 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M2-08 | golden 测试与限制清单 | M2-02/03/04 | ✅ | 2026-08-12 |
 | M3-01 | 文档解析器集合 | M1-01 | ✅ | 2026-08-12 |
 | M3-02 | DocStorage 本地实现 | M1-04 | ✅ | 2026-08-12 |
-| M3-03 | 企业微信实现 | M3-02 | ⏸ | 延后至后续里程碑 |
+| M3-03 | 企业微信实现 | M3-02 | ⏸ | 延后至 M9 |
 | M3-04 | doc 域工具 | M3-02 | ✅ | 2026-08-12（provider 恒 LOCAL） |
 | M3-05 | 切块器 | M3-01 | ✅ | 2026-08-13 |
 | M3-06 | Embedding 抽象 | M3-05 | ✅ | 2026-08-13（真实后端→M7） |
@@ -484,11 +532,11 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M4-01 | svn CLI 封装 | M1-01 | ✅ | 2026-08-13（LocalFakeSvnClient 简化版） |
 | M4-02 | 凭据管理 | M4-01 | ✅ | 2026-08-13 |
 | M4-03 | svn 域工具 | M4-01/02 | ✅ | 2026-08-13（模拟实现） |
-| M4-04 | 需求状态机 | M1-04 | ✅ | 2026-08-13（枚举+工具，流转规则待细化） |
+| M4-04 | 需求状态机 | M1-04 | ✅ | 2026-08-13（流转字典落地） |
 | M4-05 | 评估与上线流程 | M4-04/M2-07/M4-03 | ✅ | 2026-08-13（LLM 评估降级） |
-| M4-06 | 项目进度 | M1-04 | ✅ | 2026-08-13（进度自动计算待细化） |
+| M4-06 | 项目进度 | M1-04 | ✅ | 2026-08-13（进度随 project_get 落地） |
 | M4-07 | 跨实体标签 | M1-04 | ✅ | 2026-08-13 |
-| M4-08 | 追溯链路 | M4-03/05/06/07 | ⬜ | 待细化 |
+| M4-08 | 追溯链路 | M4-03/05/06/07 | ⬜ | 纳入 M8 |
 | M5-01 | Mermaid mindmap | M1-04 | ✅ | 2026-08-13 |
 | M5-02 | OPML 导出 | M5-01 | ✅ | 2026-08-13 |
 | M5-03 | 从文档生成大纲 | M5-01/M3 | ✅ | 2026-08-13 |
@@ -501,6 +549,11 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 | M6-05 | 空知识库初始化 | M6-04/M1-03 | ✅ | 2026-08-14 |
 | M6-06 | 使用文档与许可 | M6-05 | ✅ | 2026-08-14 |
 | M6-07 | 端到端验收 | M6-01~06 | ✅ | 2026-08-14 |
+| M8-01 | requirement_trace 工具 | M4-03/05/06/07 | ⬜ | 待执行 |
+| M8-02 | svn 提交关联需求 | M4-03/M1-03 | ⬜ | 待执行 |
+| M8-03 | 文档/标签聚合 | M8-01/M4-07 | ⬜ | 待执行 |
+| M9-01 | 企微文档客户端骨架 | M3-02 | ⬜ | 延后里程碑 |
+| M9-02 | doc provider 切换 | M9-01/M3-04 | ⬜ | 延后里程碑 |
 
 ---
 
@@ -527,3 +580,5 @@ M6: M6-01 → M6-02 → M6-03；M6-04 → M6-05 → M6-06；M6-07（依赖全部
 - **M4**：需求全流程（评估→开发→上线）可走通且可追溯；进度/标签可用。
 - **M5**：导图生成/导出/从文档生成；规范资源可被客户端读取。
 - **M6**：三形态全部可运行；他人按文档可独立部署空知识库；验收清单绿。
+- **M8**：requirement_trace 端到端可查；svn_commit 关联需求落库；文档/标签聚合完整；隔离测试绿。
+- **M9**：企微客户端骨架 mock 跑通；doc provider 切换不破坏 LOCAL 主链。
